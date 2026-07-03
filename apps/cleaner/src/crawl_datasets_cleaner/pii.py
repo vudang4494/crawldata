@@ -32,8 +32,12 @@ class PresidioRedactor:
         from presidio_analyzer import AnalyzerEngine
         from presidio_anonymizer import AnonymizerEngine
 
+        # Presidio ship type chưa đầy đủ (__init__ untyped, RecognizerResult của
+        # analyzer vs anonymizer là 2 class lệch nhau dù runtime tương thích) —
+        # giữ anonymizer duck-typed qua Any, tránh type-ignore lệ thuộc env.
+        anonymizer_cls: Any = AnonymizerEngine
         self._analyzer = AnalyzerEngine()
-        self._anonymizer = AnonymizerEngine()
+        self._anonymizer = anonymizer_cls()
 
     def redact(self, text: str) -> tuple[str, list[str]]:
         results = self._analyzer.analyze(text=text, language="en")

@@ -1,6 +1,11 @@
 # Workspace root (virtual) — monorepo apps/* + libs/* qua uv workspace.
 # `uv sync` cài toàn bộ member (editable); `uv run --package <name> ...` chạy 1 stage.
 
+[tool.uv]
+# Chặn trên cửa sổ Python cho universal resolution: không có bound này, resolver
+# phải thỏa cả fork ≥3.14 → rơi về llvmlite/numba 2021 (sdist-only, vỡ build).
+environments = ["python_version < '3.14'"]
+
 [tool.uv.workspace]
 members = ["apps/*", "libs/*"]
 
@@ -31,6 +36,19 @@ python_version = "3.12"
 strict = true
 namespace_packages = true
 explicit_package_bases = true
+# Map mọi src-layout member về đúng tên module — thiếu path này mypy vừa không
+# resolve cross-package import, vừa báo "source file found twice" (apps/ vs site-packages).
+mypy_path = [
+    "libs/common/src",
+    "apps/builder/src",
+    "apps/cleaner/src",
+    "apps/crawler/src",
+    "apps/extractor/src",
+    "apps/integrator/src",
+    "apps/probe/src",
+    "apps/profiler/src",
+    "apps/service/src",
+]
 
 # Third-party libs không ship type stubs / là optional backend (gate optional-import).
 [[tool.mypy.overrides]]

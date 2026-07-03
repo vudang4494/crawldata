@@ -28,11 +28,13 @@ from .formats import serialize, to_messages
 log = get_logger("builder")
 _STAGE = "S5"
 
+_pa: Any = None
 _pq: Any = None
 try:
-    import pyarrow as _pa
+    import pyarrow as _pa_mod
     import pyarrow.parquet as _pq_mod
 
+    _pa = _pa_mod
     _pq = _pq_mod
 except ImportError:  # pragma: no cover
     _pa = None

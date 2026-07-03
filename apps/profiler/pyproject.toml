@@ -6,11 +6,18 @@ requires-python = ">=3.12"
 dependencies = [
     "crawl-datasets-common",
     "click>=8.1",
-    "umap-learn>=0.5",
-    "hdbscan>=0.8",
 ]
 
 [project.optional-dependencies]
+# Clustering (§6, P1 hook) — backend nặng, gate qua extra như embed.
+# Floors: numba/llvmlite bản ≤0.53/0.36 không khai requires-python upper bound
+# nên resolver có thể chọn nhầm sdist-only → vỡ build trên Python 3.13.
+cluster = [
+    "umap-learn>=0.5",
+    "hdbscan>=0.8",
+    "numba>=0.61",
+    "llvmlite>=0.44",
+]
 embed = ["sentence-transformers>=3.0", "FlagEmbedding>=1.2"]
 dev = ["ruff>=0.4", "mypy>=1.10", "pytest>=8.2"]
 
