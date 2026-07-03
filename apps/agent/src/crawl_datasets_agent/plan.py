@@ -8,6 +8,7 @@ subset AN TOÀN của config §9.3 — cố tình không có field nào nới ga
 
 from __future__ import annotations
 
+import re
 from typing import Literal
 
 from crawl_datasets_common.settings import Settings
@@ -26,7 +27,21 @@ class DatasetPlan(BaseModel):
     lang_allow: list[str] = Field(default_factory=lambda: ["vi", "en"])
     build_format: Literal["chatml", "sharegpt", "alpaca"] = "chatml"
     quality_min_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    # §3.3 — regex loại URL non-article khỏi frontier (nav/special/login...).
+    url_exclude: list[str] = Field(default_factory=list)
     notes: str = ""
+
+    @field_validator("url_exclude")
+    @classmethod
+    def _regex_compiles(cls, v: list[str]) -> list[str]:
+        for pattern in v:
+            try:
+                re.compile(pattern)
+            except re.error as exc:  # fail-closed — regex hỏng không vào config
+                raise ValueError(
+                    f"url_exclude regex không hợp lệ {pattern!r}: {exc}"
+                ) from exc
+        return v
 
     @field_validator("seeds")
     @classmethod
@@ -44,6 +59,8 @@ def apply_plan(settings: Settings, plan: DatasetPlan) -> Settings:
     s = settings.model_copy(deep=True)
     s.crawl.max_depth = plan.max_depth
     s.crawl.render = plan.render
+    # Merge (giữ exclude sẵn có trong config) + dedup, giữ thứ tự.
+    s.crawl.url_exclude = list(dict.fromkeys([*s.crawl.url_exclude, *plan.url_exclude]))
     s.clean.lang_allow = plan.lang_allow
     s.build.format = plan.build_format
     # min_score chỉ áp khi quality đã bật sẵn trong config (cần model_path thật).

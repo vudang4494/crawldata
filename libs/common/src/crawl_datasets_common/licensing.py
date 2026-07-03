@@ -9,9 +9,12 @@ import re
 
 from .schema import UNKNOWN_LICENSE, LicenseTag
 
+# Thứ tự quan trọng: by-sa TRƯỚC by — URL "licenses/by-sa" chứa prefix "licenses/by"
+# (pilot vi.wikipedia: BY-SA từng bị tag nhầm cc-by → sai nghĩa vụ share-alike).
 _LICENSE_PATTERNS: dict[LicenseTag, tuple[str, ...]] = {
     "cc0": (r"creativecommons\.org/publicdomain/zero", r"\bcc0\b"),
     "public-domain": (r"creativecommons\.org/publicdomain/mark", r"public domain"),
+    "cc-by-sa": (r"creativecommons\.org/licenses/by-sa", r"\bcc[ -]by[ -]sa\b"),
     "cc-by": (r"creativecommons\.org/licenses/by", r"\bcc[ -]by\b"),
     "odc-by": (r"opendatacommons\.org/licenses/by", r"\bodc[ -]by\b"),
 }

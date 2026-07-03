@@ -11,6 +11,8 @@ crawl:
   max_depth: 3
   per_host_concurrency: 4
   respect_robots: true    # §2 fail-closed — KHÔNG đặt false
+  politeness_delay: 1.0   # §3 — giây giữa 2 request cùng host (robots Crawl-delay ghi đè)
+  url_exclude: []         # §3.3 — regex loại URL non-article khỏi frontier
 
 extract:
   primary: trafilatura    # trafilatura|resiliparse|rs-trafilatura

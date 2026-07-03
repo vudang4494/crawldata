@@ -116,6 +116,11 @@ class DocCleaner:
         text, c4_reason = c4_filter(text)  # §5.3 (có thể sửa text)
         if c4_reason is not None:
             return None, c4_reason
+        # Pilot finding: C4 gọt dòng có thể để lại doc rất ngắn (nav/bảng) mà
+        # Gopher không bắt được vì chạy TRƯỚC C4 (thứ tự FineWeb §5) — re-check.
+        n_words = len(text.split())
+        if n_words < self.clean.gopher_quality.min_words:
+            return None, f"c4_shrunk_words:{n_words}"
         passed.append("c4")
 
         if (fw := fineweb_custom(text)) is not None:  # §5.3

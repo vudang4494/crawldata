@@ -24,6 +24,11 @@ class CrawlSettings(BaseModel):
     max_depth: int = 3
     per_host_concurrency: int = 4
     respect_robots: bool = True  # §2 — fail-closed
+    # §3 politeness — giây tối thiểu giữa 2 request cùng host; robots Crawl-delay
+    # ghi đè nếu lớn hơn (cap 30s trong pipeline).
+    politeness_delay: float = 1.0
+    # §3.3 — regex loại URL khỏi frontier (trang nav/special/non-article).
+    url_exclude: list[str] = Field(default_factory=list)
 
 
 class ExtractSettings(BaseModel):

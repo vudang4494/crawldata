@@ -14,6 +14,10 @@ from crawl_datasets_crawler.pipeline import run
 ROOT = "https://site.example"
 
 
+def _no_sleep(_: float) -> None:  # politeness tắt trong test — không chờ thật
+    return None
+
+
 def test_frontier_dedup_and_depth() -> None:
     f = Frontier(max_depth=1)
     assert f.add(f"{ROOT}/a", 0) is True
@@ -46,7 +50,9 @@ def test_crawl_pipeline_stays_on_host(tmp_path: Path) -> None:
             f"{ROOT}/a", 200, "<html><body><p>page a</p></body></html>"
         ),
     }
-    stats = run([ROOT], tmp_path, Settings(), fetch=lambda u: m.get(u))
+    stats = run(
+        [ROOT], tmp_path, Settings(), fetch=lambda u: m.get(u), sleeper=_no_sleep
+    )
     assert stats.fetched == 2  # root + /a (other.com bị bỏ — khác host)
     recs = [
         json.loads(line)
@@ -131,3 +137,62 @@ def test_browser_mode_without_playwright_fails_closed(
     settings.crawl.render = "browser"
     with pytest.raises(SystemExit):
         run([ROOT], tmp_path, settings, fetch=lambda u: None)
+
+
+# --- Pilot fixes (§2 robots per-URL, §3 politeness, §3.3 url_exclude) ----------
+
+
+def test_robots_disallow_enforced_per_url(tmp_path: Path) -> None:
+    robots_txt = "User-agent: *\nDisallow: /private/\n"
+    m = {
+        f"{ROOT}/robots.txt": FetchResult(f"{ROOT}/robots.txt", 200, robots_txt),
+        ROOT: FetchResult(
+            ROOT,
+            200,
+            '<html><body><p>home</p><a href="/private/x">p</a>'
+            '<a href="/ok">ok</a></body></html>',
+        ),
+        f"{ROOT}/ok": FetchResult(f"{ROOT}/ok", 200, "<html><body>ok</body></html>"),
+        f"{ROOT}/private/x": FetchResult(
+            f"{ROOT}/private/x", 200, "<html><body>secret</body></html>"
+        ),
+    }
+    stats = run(
+        [ROOT], tmp_path, Settings(), fetch=lambda u: m.get(u), sleeper=_no_sleep
+    )
+    assert stats.fetched == 2  # root + /ok; /private/x bị robots chặn
+    assert stats.dropped["robots_disallow"] == 1
+
+
+def test_url_exclude_filters_frontier(tmp_path: Path) -> None:
+    settings = Settings()
+    settings.crawl.url_exclude = [r"/wiki/[^\"]*?:"]  # loại namespace kiểu wiki
+    m = {
+        ROOT: FetchResult(
+            ROOT,
+            200,
+            '<html><body><a href="/wiki/Bai_viet">a</a>'
+            '<a href="/wiki/Dac_biet:Login">s</a></body></html>',
+        ),
+        f"{ROOT}/wiki/Bai_viet": FetchResult(
+            f"{ROOT}/wiki/Bai_viet", 200, "<html><body>bai</body></html>"
+        ),
+    }
+    stats = run([ROOT], tmp_path, settings, fetch=lambda u: m.get(u), sleeper=_no_sleep)
+    assert stats.fetched == 2  # root + bài viết; trang Dac_biet: không vào frontier
+    assert stats.dropped["url_excluded"] == 1
+
+
+def test_politeness_sleeps_between_same_host_requests(tmp_path: Path) -> None:
+    robots_txt = "User-agent: *\nCrawl-delay: 5\n"
+    m = {
+        f"{ROOT}/robots.txt": FetchResult(f"{ROOT}/robots.txt", 200, robots_txt),
+        ROOT: FetchResult(
+            ROOT, 200, '<html><body><a href="/a">a</a></body></html>'
+        ),
+        f"{ROOT}/a": FetchResult(f"{ROOT}/a", 200, "<html><body>a</body></html>"),
+    }
+    sleeps: list[float] = []
+    run([ROOT], tmp_path, Settings(), fetch=lambda u: m.get(u), sleeper=sleeps.append)
+    # request thứ 2 cùng host phải chờ ~Crawl-delay (5s > politeness 1.0 mặc định)
+    assert len(sleeps) == 1 and 4.0 < sleeps[0] <= 5.0

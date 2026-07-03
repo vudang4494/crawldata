@@ -51,6 +51,12 @@ def test_detect_license() -> None:
         detect_license('<a href="https://creativecommons.org/licenses/by/4.0/">')
         == "cc-by"
     )
+    # by-sa phải TRƯỚC by trong pattern — URL by-sa chứa prefix "licenses/by"
+    # (pilot vi.wikipedia: từng bị tag nhầm cc-by → sai nghĩa vụ share-alike).
+    assert (
+        detect_license('<a href="https://creativecommons.org/licenses/by-sa/4.0/">')
+        == "cc-by-sa"
+    )
     assert detect_license("<p>All rights reserved.</p>") == "unknown"
 
 

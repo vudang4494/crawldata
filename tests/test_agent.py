@@ -154,3 +154,17 @@ def test_execute_plan_runs_s1_to_s5(tmp_path: Path) -> None:
     assert (tmp_path / "run" / "dataset_plan.json").exists()
     assert Path(summary["dataset"]).exists()
     assert Path(summary["profile_report"]).exists()
+
+
+def test_plan_url_exclude_validates_regex_and_merges() -> None:
+    with pytest.raises(ValueError):  # regex hỏng → fail-closed ngay tại plan
+        DatasetPlan(goal="g", seeds=["https://x.vn"], url_exclude=["[bad"])
+
+    base = Settings()
+    base.crawl.url_exclude = ["existing"]
+    plan = DatasetPlan(
+        goal="g", seeds=["https://x.vn"], url_exclude=["/wiki/[^\"]*?:", "existing"]
+    )
+    merged = apply_plan(base, plan)
+    # merge + dedup, giữ exclude sẵn có trong config
+    assert merged.crawl.url_exclude == ["existing", '/wiki/[^"]*?:']

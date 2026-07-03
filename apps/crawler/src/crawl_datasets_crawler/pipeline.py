@@ -8,13 +8,17 @@ respect_robots=false → refuse (§2).
 from __future__ import annotations
 
 import json
+import re
+import time
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib import robotparser
+from urllib.parse import urljoin
 
-from crawl_datasets_common.fetch import FetchResult, http_get
+from crawl_datasets_common.fetch import USER_AGENT, FetchResult, http_get
 from crawl_datasets_common.observability import (
     get_logger,
     record_drop,
@@ -29,8 +33,32 @@ from .render import build_renderer, needs_render
 
 log = get_logger("crawler")
 _STAGE = "S1"
+_MAX_CRAWL_DELAY = 30.0  # robots Crawl-delay cực đoan không được treo pipeline
 Fetcher = Callable[[str], FetchResult | None]
 Renderer = Callable[[str], FetchResult | None]
+Sleeper = Callable[[float], None]
+
+
+def _fetch_robots(
+    seeds: list[str], fetch: Fetcher
+) -> dict[str, robotparser.RobotFileParser | None]:
+    """§2 — tải robots.txt per-host để enforce Disallow per-URL + Crawl-delay.
+
+    Không có / không tải được → None = allow-all (chuẩn robots: absent = allowed).
+    """
+    robots: dict[str, robotparser.RobotFileParser | None] = {}
+    for seed in seeds:
+        host = host_of(seed)
+        if host in robots:
+            continue
+        res = fetch(urljoin(seed, "/robots.txt"))
+        rp: robotparser.RobotFileParser | None = None
+        if res is not None and res.status < 400:
+            rp = robotparser.RobotFileParser()
+            rp.parse(res.text.splitlines())
+        robots[host] = rp
+        log.info("robots_loaded", host=host, present=rp is not None)
+    return robots
 
 
 @dataclass
@@ -49,6 +77,7 @@ def run(
     *,
     renderer: Renderer | None = None,
     max_pages: int = 10_000,
+    sleeper: Sleeper = time.sleep,
 ) -> CrawlStats:
     """Crawl seeds (BFS, stay-on-host) → raw/part-00000.jsonl."""
     if not settings.crawl.respect_robots:
@@ -81,6 +110,20 @@ def run(
     for s in seeds:
         frontier.add(s, 0)
 
+    # §2 robots per-URL + §3 politeness + §3.3 url_exclude (pilot findings).
+    robots = _fetch_robots(seeds, fetch)
+    exclude_res = [re.compile(p) for p in settings.crawl.url_exclude]
+    last_fetch: dict[str, float] = {}
+
+    def _delay_for(host: str) -> float:
+        delay = settings.crawl.politeness_delay
+        rp = robots.get(host)
+        if rp is not None:
+            crawl_delay = rp.crawl_delay(USER_AGENT)
+            if crawl_delay:
+                delay = max(delay, float(crawl_delay))
+        return min(delay, _MAX_CRAWL_DELAY)
+
     per_host: Counter[str] = Counter()
     stats = CrawlStats()
     out_path = raw_tier / "part-00000.jsonl"
@@ -96,8 +139,20 @@ def run(
             if per_host[host] >= settings.crawl.per_host_concurrency * 50:
                 stats.dropped["host_cap"] += 1
                 continue
+            rp = robots.get(host)
+            if rp is not None and not rp.can_fetch(USER_AGENT, url):
+                stats.dropped["robots_disallow"] += 1  # §2 — enforce per-URL
+                record_drop(_STAGE, "robots_disallow")
+                _inc("dropped")
+                continue
             stats.seen += 1
             _inc("in")
+            prev = last_fetch.get(host)
+            if prev is not None:  # §3 politeness — chờ đủ delay giữa 2 request
+                wait = _delay_for(host) - (time.monotonic() - prev)
+                if wait > 0:
+                    sleeper(wait)
+            last_fetch[host] = time.monotonic()
             res = renderer(url) if mode == "browser" and renderer else fetch(url)
             if res is None or res.status >= 400:
                 stats.dropped["fetch_failed"] += 1
@@ -124,8 +179,12 @@ def run(
             stats.fetched += 1
             _inc("out")
             for link in extract_links(res.text, res.url):
-                if host_of(link) in seed_hosts:
-                    frontier.add(link, depth + 1)
+                if host_of(link) not in seed_hosts:
+                    continue
+                if any(rx.search(link) for rx in exclude_res):
+                    stats.dropped["url_excluded"] += 1  # §3.3 — non-article
+                    continue
+                frontier.add(link, depth + 1)
 
     mark_done(
         raw_tier,

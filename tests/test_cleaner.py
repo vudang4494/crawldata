@@ -333,3 +333,29 @@ def test_pipeline_end_to_end(tmp_path: Path) -> None:
     assert (out_dir / "clean" / "_SUCCESS").exists()
     langs = {r["lang"] for r in records}
     assert langs == {"en", "vi"}
+
+
+def test_c4_shrunk_doc_dropped() -> None:
+    # Pilot finding: doc dài qua Gopher nhưng C4 gọt (dòng không kết câu) còn
+    # rất ngắn → phải drop, không được lọt vào clean tier.
+    from crawl_datasets_cleaner.pipeline import DocCleaner
+
+    lines = [  # 12 dòng nav đa dạng (~96 từ, qua Gopher) — không dòng nào kết câu
+        "Home page and latest news from the region",
+        "Contact the editorial team with your questions",
+        "About the mission of this small newsroom",
+        "Archive of older stories to browse today",
+        "Weather updates and traffic notes for drivers",
+        "Sports coverage with scores from local teams",
+        "Culture section on books music and film",
+        "Business news with markets and company reports",
+        "Opinion pieces that challenge the usual thinking",
+        "Health advice from doctors and trusted experts",
+        "Science stories about space oceans and climate",
+        "Travel guides to cities villages and mountains",
+    ]
+    text = "\n".join(lines) + "\nOnly this short sentence survives the filter."
+    doc = {"text": text, "source_url": "https://a.com/nav", "license": "cc-by"}
+    rec, reason = DocCleaner(Settings()).clean_one(doc)
+    assert rec is None and reason is not None
+    assert reason.startswith("c4_shrunk_words:")

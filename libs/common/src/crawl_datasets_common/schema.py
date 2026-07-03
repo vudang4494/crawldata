@@ -11,7 +11,7 @@ from typing import Literal, get_args
 
 from pydantic import BaseModel, Field, computed_field
 
-LicenseTag = Literal["cc-by", "cc0", "public-domain", "odc-by", "unknown"]
+LicenseTag = Literal["cc-by", "cc-by-sa", "cc0", "public-domain", "odc-by", "unknown"]
 """§2 — license:unknown → loại khỏi dataset publish (fail-closed)."""
 
 LICENSE_TAGS: tuple[LicenseTag, ...] = get_args(LicenseTag)

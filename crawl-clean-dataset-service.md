@@ -290,7 +290,7 @@ Ví dụ record (ChatML-style JSONL):
 class Provenance(BaseModel):
     source_url: str
     crawl_ts: datetime
-    license: Literal["cc-by","cc0","public-domain","odc-by","unknown"]
+    license: Literal["cc-by","cc-by-sa","cc0","public-domain","odc-by","unknown"]
     extractor: str            # "trafilatura-2.1.0"
     pipeline_version: str
     seed: int
@@ -374,6 +374,8 @@ crawl:
   max_depth: 3
   per_host_concurrency: 4
   respect_robots: true
+  politeness_delay: 1.0   # giây giữa 2 request cùng host; robots Crawl-delay ghi đè (§3)
+  url_exclude: []         # regex loại URL non-article khỏi frontier (§3.3)
 extract:
   primary: trafilatura    # trafilatura|resiliparse|rs-trafilatura
   fallback: readability

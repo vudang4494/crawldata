@@ -33,7 +33,10 @@ Chỉ trả về MỘT JSON object, không markdown, không văn xuôi ngoài JS
     "seeds": ["url bắt đầu — URL gốc + seed tốt từ sitemap trong profile"],
     "max_depth": 0-6, "max_pages": <=20000, "render": "auto|http|browser",
     "lang_allow": ["vi","en"], "build_format": "chatml|sharegpt|alpaca",
-    "quality_min_score": số 0-1 hoặc null, "notes": "lưu ý"}}
+    "quality_min_score": số 0-1 hoặc null,
+    "url_exclude": ["regex Python loại URL KHÔNG phải nội dung — trang nav,
+      special, login, danh mục... ví dụ Wikipedia: ["/wiki/[^\"]*?:", "Trang_Ch"]],
+    "notes": "lưu ý"}}
 
 Quy tắc: KHÔNG có cách nào bỏ qua robots/license/PII — pipeline tự enforce;
 license unknown sẽ bị loại khỏi dataset publish; chọn render theo profile."""
