@@ -32,9 +32,18 @@ strict = true
 namespace_packages = true
 explicit_package_bases = true
 
-# Third-party libs không ship type stubs (§ skeleton dùng ignore_missing_imports).
+# Third-party libs không ship type stubs / là optional backend (gate optional-import).
 [[tool.mypy.overrides]]
-module = ["arq.*"]
+module = [
+    "arq.*",
+    "ftfy.*",
+    "fasttext.*",
+    "presidio_analyzer.*",
+    "presidio_anonymizer.*",
+    "huggingface_hub.*",
+    "datatrove.*",
+    "datasketch.*",
+]
 ignore_missing_imports = true
 
 [tool.pylint]
