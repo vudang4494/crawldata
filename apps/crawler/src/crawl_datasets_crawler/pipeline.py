@@ -25,16 +25,19 @@ from crawl_datasets_common.settings import Settings
 from crawl_datasets_common.storage import StorageLayout, mark_done
 
 from .frontier import Frontier, extract_links, host_of
+from .render import build_renderer, needs_render
 
 log = get_logger("crawler")
 _STAGE = "S1"
 Fetcher = Callable[[str], FetchResult | None]
+Renderer = Callable[[str], FetchResult | None]
 
 
 @dataclass
 class CrawlStats:
     seen: int = 0
     fetched: int = 0
+    escalated: int = 0  # §3.2 auto — số URL đã escalate http→browser
     dropped: Counter[str] = field(default_factory=Counter)
 
 
@@ -44,11 +47,32 @@ def run(
     settings: Settings,
     fetch: Fetcher | None = None,
     *,
+    renderer: Renderer | None = None,
     max_pages: int = 10_000,
 ) -> CrawlStats:
     """Crawl seeds (BFS, stay-on-host) → raw/part-00000.jsonl."""
     if not settings.crawl.respect_robots:
         raise SystemExit("respect_robots=false vi phạm §2 (legal gate fail-closed)")
+
+    # §3.2 — render mode. browser: bắt buộc có renderer (fail-closed, S0 đã gắn cờ
+    # JS-required). auto: build lazy khi URL đầu tiên cần escalate (chromium đắt).
+    mode = settings.crawl.render
+    if mode == "browser" and renderer is None:
+        browser = build_renderer()
+        if browser is None:
+            raise SystemExit("render=browser nhưng Playwright không sẵn sàng (§3.2)")
+        renderer = browser.render
+    _lazy: dict[str, Renderer | None] = {}
+
+    def _auto_renderer() -> Renderer | None:
+        if renderer is not None:
+            return renderer
+        if "r" not in _lazy:
+            browser = build_renderer()
+            _lazy["r"] = browser.render if browser is not None else None
+            if browser is None:
+                log.warning("render_escalate_unavailable")  # auto chạy tiếp http-only
+        return _lazy["r"]
 
     fetch = fetch or http_get
     raw_tier = StorageLayout(root=out_dir).tier("raw")
@@ -74,12 +98,20 @@ def run(
                 continue
             stats.seen += 1
             _inc("in")
-            res = fetch(url)
+            res = renderer(url) if mode == "browser" and renderer else fetch(url)
             if res is None or res.status >= 400:
                 stats.dropped["fetch_failed"] += 1
                 record_drop(_STAGE, "fetch_failed")
                 _inc("dropped")
                 continue
+            if mode == "auto" and needs_render(
+                res.text, settings.crawl.render_min_text_len
+            ):  # §3.2 — HTTP trước, escalate browser khi text mỏng/root rỗng
+                r = _auto_renderer()
+                rendered = r(url) if r is not None else None
+                if rendered is not None and rendered.status < 400:
+                    res = rendered
+                    stats.escalated += 1
             per_host[host] += 1
             record = {
                 "source_url": res.url,
@@ -101,15 +133,18 @@ def run(
         metadata={
             "seen": stats.seen,
             "fetched": stats.fetched,
+            "escalated": stats.escalated,
             "dropped": dict(stats.dropped),
             "seeds": seeds,
             "max_depth": settings.crawl.max_depth,
+            "render": mode,
         },
     )
     log.info(
         "crawl_summary",
         seen=stats.seen,
         fetched=stats.fetched,
+        escalated=stats.escalated,
         dropped=dict(stats.dropped),
     )
     return stats

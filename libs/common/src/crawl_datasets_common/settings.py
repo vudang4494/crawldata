@@ -20,6 +20,7 @@ class GlobalSettings(BaseModel):
 
 class CrawlSettings(BaseModel):
     render: str = Field(default="auto", pattern="^(auto|http|browser)$")
+    render_min_text_len: int = 200  # §3.2 auto: text < threshold → escalate browser
     max_depth: int = 3
     per_host_concurrency: int = 4
     respect_robots: bool = True  # §2 — fail-closed
@@ -84,6 +85,16 @@ class DecontamConfig(BaseModel):
     ngram: int = 13  # §5.6 — GPT-3 style
 
 
+class QualityConfig(BaseModel):
+    """§5.3 — quality classifier (tùy chọn, P1). enabled=true đòi backend thật."""
+
+    enabled: bool = False
+    backend: str = Field(default="fasttext", pattern="^(fasttext)$")
+    model_path: str | None = None
+    positive_label: str = "__label__hq"  # FineWeb-Edu style label dương
+    min_score: float = 0.5
+
+
 class CleanSettings(BaseModel):
     lang_id: str = Field(default="glotlid")
     lang_allow: list[str] = Field(default_factory=lambda: ["vi", "en"])
@@ -93,6 +104,27 @@ class CleanSettings(BaseModel):
     minhash: MinHashConfig = Field(default_factory=MinHashConfig)
     pii: PIIConfig = Field(default_factory=PIIConfig)
     decontam: DecontamConfig = Field(default_factory=DecontamConfig)
+    quality: QualityConfig = Field(default_factory=QualityConfig)
+
+
+class ClusterConfig(BaseModel):
+    """§6 — clustering BGE-M3→UMAP→HDBSCAN (P1). Backend nặng: extras cluster+embed."""
+
+    enabled: bool = False
+    embed_model: str = "BAAI/bge-m3"  # §10 — embed trên 4090
+    max_docs: int = 2000  # cap bounded-memory; sample ghi vào report (no silent cap)
+    min_cluster_size: int = 5
+
+
+class ProfileSettings(BaseModel):
+    cluster: ClusterConfig = Field(default_factory=ClusterConfig)
+
+
+class ServiceSettings(BaseModel):
+    """§1 — FastAPI + arq (Redis queue)."""
+
+    redis_url: str = "redis://localhost:6379"
+    max_jobs: int = 4
 
 
 class BuildSettings(BaseModel):
@@ -122,8 +154,10 @@ class Settings(BaseModel):
     crawl: CrawlSettings = Field(default_factory=CrawlSettings)
     extract: ExtractSettings = Field(default_factory=ExtractSettings)
     clean: CleanSettings = Field(default_factory=CleanSettings)
+    profile: ProfileSettings = Field(default_factory=ProfileSettings)
     build: BuildSettings = Field(default_factory=BuildSettings)
     integrate: IntegrateSettings = Field(default_factory=IntegrateSettings)
+    service: ServiceSettings = Field(default_factory=ServiceSettings)
 
     model_config = {"populate_by_name": True}
 

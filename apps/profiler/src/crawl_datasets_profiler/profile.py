@@ -36,6 +36,9 @@ class Profile:
     pii_dist: dict[str, int] = field(default_factory=dict)
     anomalies: dict[str, int] = field(default_factory=dict)
     suggestions: list[str] = field(default_factory=list)
+    # §6 clustering (P1) — đúng 1 trong 2 khác None (skip-reason fail-visible).
+    clustering: dict[str, Any] | None = None
+    clustering_skipped: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

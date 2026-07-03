@@ -368,6 +368,7 @@ global:
   pipeline_version: "1.3.0"
 crawl:
   render: auto            # auto|http|browser
+  render_min_text_len: 200  # auto: text < threshold → escalate browser (§3.2)
   max_depth: 3
   per_host_concurrency: 4
   respect_robots: true
@@ -383,12 +384,18 @@ clean:
   minhash: {ngram: 5, num_hashes: 112, bands: 14, rows: 8, scope: per_source}
   pii: {backend: presidio, vi_regex: true}
   decontam: {benchmarks: [mmlu, aime, math500, mgsm], ngram: 13}
+  quality: {enabled: false, backend: fasttext, model_path: null, positive_label: __label__hq, min_score: 0.5}  # §5.3 (P1)
+profile:
+  cluster: {enabled: false, embed_model: BAAI/bge-m3, max_docs: 2000, min_cluster_size: 5}  # §6 (P1)
 build:
   format: chatml
 integrate:
   cross_dedup: true
   source_priority: [curated_v2, crawl_new]   # giữ doc nguồn hạng cao
   mix_ratios: {vi: 0.5, en: 0.5}             # theo token
+service:
+  redis_url: redis://localhost:6379          # arq queue (§1)
+  max_jobs: 4
 ```
 
 ### 9.4 Observability

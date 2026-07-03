@@ -61,3 +61,73 @@ def test_crawl_fail_closed_when_robots_disabled(tmp_path: Path) -> None:
     settings.crawl.respect_robots = False
     with pytest.raises(SystemExit):
         run([ROOT], tmp_path, settings, fetch=lambda u: None)
+
+
+# --- §3.2 JS-render (P1) ------------------------------------------------------
+
+_SPA_HTML = (
+    '<html><body><div id="root"></div><script>window.app()</script></body></html>'
+)
+_FULL_HTML = "<html><body><p>" + "rendered content word " * 30 + "</p></body></html>"
+
+
+def test_needs_render_heuristic() -> None:
+    from crawl_datasets_crawler.render import needs_render
+
+    assert needs_render(_SPA_HTML, 200) is True  # root SPA rỗng + text mỏng
+    assert needs_render(_FULL_HTML, 200) is False
+
+
+def test_auto_mode_escalates_to_renderer(tmp_path: Path) -> None:
+    """§3.2 auto — HTTP trước; HTML mỏng → escalate browser (renderer inject)."""
+    fetched = FetchResult(ROOT, 200, _SPA_HTML, {"content-type": "text/html"})
+    rendered = FetchResult(ROOT, 200, _FULL_HTML, {"content-type": "text/html"})
+    stats = run(
+        [ROOT],
+        tmp_path,
+        Settings(),
+        fetch=lambda u: fetched,
+        renderer=lambda u: rendered,
+    )
+    assert stats.escalated == 1 and stats.fetched == 1
+    rec = json.loads(
+        (tmp_path / "raw" / "part-00000.jsonl").read_text().splitlines()[0]
+    )
+    assert "rendered content" in rec["html"]
+
+
+def test_auto_mode_keeps_http_when_renderer_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import crawl_datasets_crawler.pipeline as crawler_pipeline
+
+    monkeypatch.setattr(crawler_pipeline, "build_renderer", lambda: None)
+    fetched = FetchResult(ROOT, 200, _SPA_HTML, {})
+    stats = run([ROOT], tmp_path, Settings(), fetch=lambda u: fetched)
+    assert stats.fetched == 1 and stats.escalated == 0  # http-only, không crash
+
+
+def test_browser_mode_uses_renderer_for_all_fetches(tmp_path: Path) -> None:
+    calls: list[str] = []
+
+    def renderer(url: str) -> FetchResult:
+        calls.append(url)
+        return FetchResult(url, 200, _FULL_HTML, {})
+
+    settings = Settings()
+    settings.crawl.render = "browser"
+    stats = run([ROOT], tmp_path, settings, fetch=lambda u: None, renderer=renderer)
+    assert stats.fetched == 1 and calls == [ROOT]  # fetch http không được gọi
+
+
+def test_browser_mode_without_playwright_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """§3.2 — S0 gắn cờ JS-required mà không render được → refuse, không crawl mù."""
+    import crawl_datasets_crawler.pipeline as crawler_pipeline
+
+    monkeypatch.setattr(crawler_pipeline, "build_renderer", lambda: None)
+    settings = Settings()
+    settings.crawl.render = "browser"
+    with pytest.raises(SystemExit):
+        run([ROOT], tmp_path, settings, fetch=lambda u: None)

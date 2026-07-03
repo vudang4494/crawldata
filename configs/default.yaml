@@ -7,6 +7,7 @@ global:
 
 crawl:
   render: auto            # auto|http|browser
+  render_min_text_len: 200  # §3.2 auto — text < threshold → escalate browser
   max_depth: 3
   per_host_concurrency: 4
   respect_robots: true    # §2 fail-closed — KHÔNG đặt false
@@ -46,6 +47,19 @@ clean:
   decontam:
     benchmarks: [mmlu, aime, math500, mgsm]
     ngram: 13
+  quality:                 # §5.3 quality classifier (P1, tùy chọn)
+    enabled: false         # true đòi fasttext + model_path (fail-closed)
+    backend: fasttext
+    model_path: null
+    positive_label: "__label__hq"
+    min_score: 0.5
+
+profile:
+  cluster:                 # §6 BGE-M3→UMAP→HDBSCAN (P1) — extras cluster+embed
+    enabled: false
+    embed_model: BAAI/bge-m3
+    max_docs: 2000
+    min_cluster_size: 5
 
 build:
   format: chatml
@@ -56,3 +70,7 @@ integrate:
   mix_ratios:
     vi: 0.5
     en: 0.5
+
+service:
+  redis_url: redis://localhost:6379   # §1 — arq queue
+  max_jobs: 4

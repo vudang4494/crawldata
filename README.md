@@ -2,7 +2,7 @@
 
 Reference skeleton cho service dựng dataset fine-tuning (SFT/instruction-tuning) đa ngữ (VN + EN/multilingual).
 
-> **Spec là source of truth:** [`crawl-clean-dataset-service.md`](./crawl-clean-dataset-service.md). Mọi quyết định implementation (tool, config key, threshold, thứ tự stage, hardware target) đều được fix bởi spec. Repo này chỉ là **skeleton** — chưa có logic pipeline thật, chỉ có wiring + contract + entrypoint để P0 MVP bắt đầu triển khai.
+> **Spec là source of truth:** [`crawl-clean-dataset-service.md`](./crawl-clean-dataset-service.md). Mọi quyết định implementation (tool, config key, threshold, thứ tự stage, hardware target) đều được fix bởi spec. **Toàn bộ pipeline S0–S6 + các feature P1 đã implement** (core pure-Python, backend nặng gated qua extras — thiếu backend vẫn chạy với fallback). Còn lại: P2 (NeMo GPU dedup, semantic dedup) và P3 (service polish).
 
 ## Cấu trúc
 
@@ -60,15 +60,16 @@ uv sync --all-extras --all-groups
 
 # Chạy service local (cần Redis ở ops/)
 docker compose -f ops/docker-compose.yml up -d redis minio prometheus grafana
-uv run --package crawl-datasets-service uvicorn crawl_datasets_service.main:app --reload
+make run-service   # FastAPI (uvicorn)
+make run-worker    # arq worker chạy job crawl/build/integrate
 
-# Audit spec
-uv run verify-design-spec
+# Gate đầy đủ trước khi merge (lock + spec scan + lint + type + test)
+make verify
 ```
 
 ## Phased build (§12)
 
-- **P0 MVP:** probe + httpx/Scrapy + trafilatura + NFC/ftfy → GlotLID → Gopher+C4 → exact+MinHash dedup → Presidio → ChatML JSONL. datatrove backbone. DVC. Seed + checkpoint + Prometheus.
-- **P1:** Playwright pool, profiling, decontam, quality classifier, VN overrides.
-- **P2:** cross-dedup Zyda-2, NeMo GPU dedup, semantic dedup.
-- **P3:** FastAPI hoàn chỉnh, Grafana dashboard, Langfuse (nếu có LLM-judge).
+- **P0 MVP — ✅ xong:** probe + crawl + trafilatura + NFC/ftfy → LID → Gopher+C4 → exact+MinHash dedup → PII → ChatML JSONL. DVC. Seed + checkpoint + Prometheus.
+- **P1 — ✅ xong:** Playwright render (§3.2), profiling+clustering (§6), decontam (§5.6), quality classifier (§5.3), VN overrides (§5.3/§11), arq worker wiring; cross-dedup Zyda-2 + mix (§8) cũng đã có.
+- **P2:** NeMo GPU dedup (A100 burst), semantic dedup.
+- **P3:** service polish (job progress/eta), Grafana dashboard, Langfuse (nếu có LLM-judge).

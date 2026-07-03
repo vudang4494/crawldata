@@ -1,4 +1,4 @@
-.PHONY: help install sync lint format type test audit verify docker-up docker-down dvc-repro run-service
+.PHONY: help install sync lint format type test audit verify docker-up docker-down dvc-repro run-service run-worker
 
 help:
 	@echo "Targets:"
@@ -14,6 +14,7 @@ help:
 	@echo "  docker-down  docker compose -f ops/docker-compose.yml down"
 	@echo "  dvc-repro    dvc repro"
 	@echo "  run-service  uvicorn crawl_datasets_service.main:app --reload"
+	@echo "  run-worker   arq crawl_datasets_service.worker.WorkerSettings (cần Redis)"
 
 install:
 	curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -55,3 +56,7 @@ dvc-repro:
 
 run-service:
 	uv run --package crawl-datasets-service uvicorn crawl_datasets_service.main:app --reload
+
+# Worker arq (cần Redis: make docker-up)
+run-worker:
+	uv run --package crawl-datasets-service arq crawl_datasets_service.worker.WorkerSettings

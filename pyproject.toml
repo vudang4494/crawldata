@@ -10,8 +10,11 @@ environments = ["python_version < '3.14'"]
 members = ["apps/*", "libs/*"]
 
 [tool.uv.sources]
-# Mọi member phụ thuộc crawl-datasets-common được resolve từ workspace, không phải PyPI.
+# Member phụ thuộc member khác được resolve từ workspace, không phải PyPI.
 crawl-datasets-common = { workspace = true }
+crawl-datasets-crawler = { workspace = true }
+crawl-datasets-builder = { workspace = true }
+crawl-datasets-integrator = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -66,6 +69,10 @@ module = [
     "fitz.*",
     "pyarrow.*",
     "httpx.*",
+    "playwright.*",
+    "umap.*",
+    "hdbscan.*",
+    "sentence_transformers.*",
 ]
 ignore_missing_imports = true
 

@@ -39,6 +39,7 @@ from .filters import c4_filter, fineweb_custom, gopher_quality, gopher_repetitio
 from .lid import LanguageIdentifier
 from .normalize import normalize_text
 from .pii import build_presidio, redact_pii
+from .quality import build_scorer
 
 log = get_logger("cleaner")
 _STAGE = "S3"
@@ -77,6 +78,8 @@ class DocCleaner:
         self.lang_score_min: dict[str, float] = c.lang_score_min.model_dump()
         # Presidio chỉ init khi backend yêu cầu VÀ cài sẵn (None → regex-only).
         self.presidio = build_presidio() if c.pii.backend == "presidio" else None
+        # §5.3 quality classifier (P1): None khi tắt; raise khi bật mà thiếu backend.
+        self.quality = build_scorer(c.quality)
 
     def clean_one(
         self, doc: Mapping[str, Any]
@@ -140,6 +143,15 @@ class DocCleaner:
             return None, "decontam"
         passed.append("decontam")
 
+        # §5.3 quality classifier — chạy CUỐI (inference đắt, không chấm doc
+        # sẽ bị drop bởi filter/dedup rẻ hơn ở trên).
+        quality: float | None = None
+        if self.quality is not None:
+            quality = self.quality.score(text)
+            if quality < self.clean.quality.min_score:
+                return None, "quality_score_low"
+            passed.append("quality")
+
         raw_license = doc.get("license")
         lic: LicenseTag = (
             raw_license if raw_license in LICENSE_TAGS else UNKNOWN_LICENSE
@@ -157,7 +169,7 @@ class DocCleaner:
             "id": doc_id,
             "text": redacted,
             "lang": lang,
-            "quality": None,  # quality classifier là P1 (§5.3)
+            "quality": quality,  # §5.3 — None khi classifier tắt
             "pii_found": pii_types,
             "prov": prov.model_dump(mode="json"),
         }

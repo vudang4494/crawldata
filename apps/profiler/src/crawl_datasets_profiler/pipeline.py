@@ -10,6 +10,7 @@ from typing import Any
 from crawl_datasets_common.observability import get_logger, stage_timer
 from crawl_datasets_common.settings import Settings
 
+from .cluster import build_clusters
 from .profile import Profile, build_profile
 
 log = get_logger("profiler")
@@ -28,8 +29,22 @@ def _iter_records(in_dir: Path) -> Iterator[dict[str, Any]]:
 def run(in_dir: Path, out_dir: Path, settings: Settings) -> Profile:
     """Profile clean shards → profile_report.json (§6). Trước build → quyết mix (§8)."""
     out_dir.mkdir(parents=True, exist_ok=True)
+    cluster_cfg = settings.profile.cluster
+    sample: list[str] = []  # bounded (max_docs) — không load-all (§0)
+
+    def _stream() -> Iterator[dict[str, Any]]:
+        for rec in _iter_records(in_dir):
+            if cluster_cfg.enabled and len(sample) < cluster_cfg.max_docs:
+                sample.append(str(rec.get("text", ""))[:2000])
+            yield rec
+
     with stage_timer("S4"):
-        profile = build_profile(_iter_records(in_dir))
+        profile = build_profile(_stream())
+        profile.clustering, profile.clustering_skipped = build_clusters(
+            sample, cfg=cluster_cfg, seed=settings.global_.seed
+        )
+        if profile.clustering is not None:
+            profile.clustering["total_docs"] = profile.n_docs  # no silent cap
         (out_dir / "profile_report.json").write_text(
             json.dumps(profile.to_dict(), ensure_ascii=False, indent=2),
             encoding="utf-8",
@@ -39,5 +54,6 @@ def run(in_dir: Path, out_dir: Path, settings: Settings) -> Profile:
         n_docs=profile.n_docs,
         langs=profile.lang_dist,
         n_suggestions=len(profile.suggestions),
+        clustering_skipped=profile.clustering_skipped,
     )
     return profile

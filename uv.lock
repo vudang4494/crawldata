@@ -1085,7 +1085,10 @@ version = "1.3.0"
 source = { editable = "apps/service" }
 dependencies = [
     { name = "arq", marker = "python_full_version < '3.14'" },
+    { name = "crawl-datasets-builder", marker = "python_full_version < '3.14'" },
     { name = "crawl-datasets-common", marker = "python_full_version < '3.14'" },
+    { name = "crawl-datasets-crawler", marker = "python_full_version < '3.14'" },
+    { name = "crawl-datasets-integrator", marker = "python_full_version < '3.14'" },
     { name = "fastapi", marker = "python_full_version < '3.14'" },
     { name = "pydantic", marker = "python_full_version < '3.14'" },
     { name = "uvicorn", extra = ["standard"], marker = "python_full_version < '3.14'" },
@@ -1102,7 +1105,10 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "arq", specifier = ">=0.25" },
+    { name = "crawl-datasets-builder", editable = "apps/builder" },
     { name = "crawl-datasets-common", editable = "libs/common" },
+    { name = "crawl-datasets-crawler", editable = "apps/crawler" },
+    { name = "crawl-datasets-integrator", editable = "apps/integrator" },
     { name = "fastapi", specifier = ">=0.111" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },

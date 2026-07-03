@@ -20,7 +20,12 @@ from crawl_datasets_cleaner.normalize import normalize_text
 from crawl_datasets_cleaner.pii import build_presidio, redact_pii
 from crawl_datasets_cleaner.pipeline import run
 from crawl_datasets_common.provenance import verify_provenance
-from crawl_datasets_common.settings import GopherQuality, Settings, VIOverrides
+from crawl_datasets_common.settings import (
+    GopherQuality,
+    QualityConfig,
+    Settings,
+    VIOverrides,
+)
 
 # ~60-word coherent docs that pass every §5.3 filter.
 GOOD_EN = (
@@ -91,6 +96,82 @@ def test_build_presidio_none_without_backend(monkeypatch: pytest.MonkeyPatch) ->
     # gate phải trả None → fallback regex-only (§5.5), deterministic bất kể env.
     monkeypatch.setitem(sys.modules, "presidio_analyzer", None)
     assert build_presidio() is None
+
+
+# --- §5.3 quality classifier (P1) ---------------------------------------------
+
+
+class _FakeFastTextModel:
+    """fastText giả — predict trả (labels, probs) như model thật."""
+
+    def __init__(self, hq_prob: float) -> None:
+        self._hq = hq_prob
+
+    def predict(self, text: str, k: int = 1) -> tuple[list[str], list[float]]:
+        return ["__label__hq", "__label__lq"], [self._hq, 1.0 - self._hq]
+
+
+def _quality_settings(
+    monkeypatch: pytest.MonkeyPatch, *, hq_prob: float, min_score: float
+) -> Settings:
+    from crawl_datasets_cleaner import quality
+
+    class _FakeFastTextModule:
+        @staticmethod
+        def load_model(path: str) -> _FakeFastTextModel:
+            return _FakeFastTextModel(hq_prob)
+
+    monkeypatch.setattr(quality, "_fasttext", _FakeFastTextModule)
+    s = Settings()
+    s.clean.quality.enabled = True
+    s.clean.quality.model_path = "fake-edu-classifier.bin"
+    s.clean.quality.min_score = min_score
+    return s
+
+
+def test_quality_scorer_disabled_returns_none() -> None:
+    from crawl_datasets_cleaner.quality import build_scorer
+
+    assert build_scorer(QualityConfig()) is None  # enabled=false mặc định
+
+
+def test_quality_enabled_without_backend_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from crawl_datasets_cleaner import quality
+
+    monkeypatch.setattr(quality, "_fasttext", None)
+    with pytest.raises(RuntimeError):
+        quality.build_scorer(QualityConfig(enabled=True, model_path="m.bin"))
+
+
+def test_quality_enabled_without_model_path_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from crawl_datasets_cleaner import quality
+
+    monkeypatch.setattr(quality, "_fasttext", object())  # backend có, thiếu model
+    with pytest.raises(RuntimeError):
+        quality.build_scorer(QualityConfig(enabled=True))
+
+
+def test_quality_classifier_scores_and_filters(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """§5.3 — score ghi vào record + filter theo min_score, chạy cuối chuỗi."""
+    from crawl_datasets_cleaner.pipeline import DocCleaner
+
+    doc = {"text": GOOD_EN, "source_url": "https://a.com/q", "license": "cc-by"}
+
+    keep = DocCleaner(_quality_settings(monkeypatch, hq_prob=0.9, min_score=0.5))
+    rec, reason = keep.clean_one(doc)
+    assert reason is None and rec is not None
+    assert rec["quality"] == pytest.approx(0.9)
+    assert "quality" in rec["prov"]["filters_passed"]
+
+    strict = DocCleaner(_quality_settings(monkeypatch, hq_prob=0.9, min_score=0.95))
+    rec2, reason2 = strict.clean_one(doc)
+    assert rec2 is None and reason2 == "quality_score_low"
 
 
 def test_minhash_is_deterministic_by_seed() -> None:
