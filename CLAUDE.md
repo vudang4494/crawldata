@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 A **Crawl → Clean → Build → Integrate** service for producing SFT/instruction-tuning datasets (Vietnamese + English/multilingual), targeting **RTX 4090 24GB local + A100 80GB burst on Vast.ai**. Two layers:
 
 1. **The spec — `crawl-clean-dataset-service.md`** (Vietnamese reference architecture, §0–§13) is the **product source of truth**. Every implementation decision (tool choice, config key, threshold, pipeline order, hardware target) is fixed by it.
-2. **A uv-workspace monorepo skeleton** implementing that spec: `apps/` (one package per stage S0–S6 + `service`) and `libs/common` (shared contract). As of the current P0 phase, every stage entrypoint is a **TODO stub** (logging + fail-closed guards + checkpoint markers, no real pipeline logic yet) — the contract layer (config/schema/storage/observability/DVC/service) is wired, the processing is not.
+2. **A uv-workspace monorepo** implementing that spec: `apps/` (one package per stage S0–S6 + `service`) and `libs/common` (shared contract). **All seven stages S0–S6 have real pipeline logic** (pure-Python core; heavy backends gated — see patterns below). What is still P1/hook-only: quality classifier, BGE-M3/UMAP/HDBSCAN clustering in S4, Playwright JS-render, arq worker wiring.
 
 Before writing or reviewing pipeline code, read the relevant §, then run the **verify-design-spec** skill (below) — it enforces the spec contract. Do not change spec-fixed decisions without flagging the conflict.
 
@@ -25,18 +25,15 @@ Canonical targets (`Makefile`):
 | Reproduce pipeline | `make dvc-repro` (`uv run dvc repro`) |
 | Run service | `make run-service` (uvicorn `crawl_datasets_service.main:app`) |
 
-- **Single test:** `uv run pytest tests/test_schema.py::test_stable_id_is_deterministic` (or `pytest -k <expr>`). `tests/conftest.py` puts every `apps/*/src` + `libs/*/src` on `sys.path`, so tests run **without** an install.
-- **Spec compliance on a file/dir:** `node .claude/skills/verify-design-spec/verify.mjs --target <path>` (exit 0 clean, 1 warn, 2 error). Run this before merging anything touching S0–S6.
+- **Single test:** `uv run pytest tests/test_cleaner.py::test_pipeline_end_to_end` (or `pytest -k <expr>`). `tests/conftest.py` puts every `apps/*/src` + `libs/*/src` on `sys.path`, so tests import `crawl_datasets_*` **without** an install.
+- **Spec compliance on a file/dir:** `node .claude/skills/verify-design-spec/verify.mjs --target <path>` (exit 0 clean, 1 warn, 2 error). Run before merging anything touching S0–S6.
 
-**Known caveat (P0):** `uv sync` / `uv run` / `uv lock` currently fail during resolution — several **optional** extras pin non-existent PyPI packages (`glotlid`, `nemo-curator`, `rs-trafilatura`; GlotLID actually ships via HuggingFace). This blocks the `uv`-based `make` targets but not the core code. Until those pins are fixed, run tools standalone:
-
+**Fast dev loop (no heavy install):** `make sync`/`make test` resolve fine (`uv.lock` is committed), but a full sync pulls heavy deps (datatrove, presidio→spaCy, pyarrow…). Because the whole pure-Python core + tests run **without** those (gated backends fall back — see below), the quick path is a throwaway env:
 ```bash
 ruff check apps libs tests
-node .claude/skills/verify-design-spec/verify.mjs
-# tests / mypy in a throwaway env (conftest handles sys.path):
 uv run --no-project --with pytest --with pydantic --with pyyaml --with structlog --with click pytest tests/
 ```
-`mypy --strict` additionally needs `types-PyYAML` + `prometheus-client` installed (and the `libs/common/.../py.typed` marker, which must stay present).
+`mypy --strict` additionally needs `types-PyYAML` + `prometheus-client` + `fastapi` + `arq` + `uvicorn` installed, all `apps/*/src` on `MYPYPATH`, and the `libs/common/.../py.typed` marker present (its absence silently makes mypy skip cross-package types). Untyped third-party libs are allow-listed under `[[tool.mypy.overrides]]` in the root `pyproject.toml` — add new gated backends there.
 
 ## Architecture (big picture)
 
@@ -45,7 +42,18 @@ uv run --no-project --with pytest --with pydantic --with pyyaml --with structlog
 - **Pipeline stages** map 1:1 to spec sections: S0 probe (§2) → S1 crawl (§3) → S2 extract (§4) → S3 clean/core (§5) → S4 profile (§6) / S5 build (§7) → S6 integrate (§8). **`dvc.yaml`** declares each stage's `deps/outs/params`, so changing a config param triggers `dvc repro` to rerun only affected stages — this is the reproducibility gate (§7.3). `raw/` and large tiers are `cache: false` (immutable / large).
 - **Config as single source of truth:** `configs/default.yaml` ⟷ `libs/common/settings.py` (Pydantic models) ⟷ spec **§9.3**, key-for-key. `configs/dev.yaml` = local overrides; resolution order is explicit path > `CDS_CONFIG` env > `configs/default.yaml`. Never hardcode thresholds/model literals. Renaming a key means updating the YAML, `settings.py`, **and** every §9.3 reference in the spec.
 - **Contract types** (`libs/common/schema.py`, spec §7.2): `SFTRecord` + `Provenance` + `stable_id()`. Fail-closed provenance is enforced by Pydantic required fields + `provenance.verify_provenance`. `LicenseTag` is a `Literal`, **not an `Enum`** — use the `UNKNOWN_LICENSE` constant / a string value, never attribute access (`LicenseTag.unknown` crashes; the verifier flags it).
-- **Observability** (`libs/common/observability.py`, §9.4): structlog JSON + Prometheus counters (`stage_records_total`, `drop_reason_total`, `stage_duration_seconds`). The prometheus_client import is guarded so the skeleton runs without it.
+- **Observability** (`libs/common/observability.py`, §9.4): structlog JSON + Prometheus counters (`stage_records_total`, `drop_reason_total`, `stage_duration_seconds`). The prometheus_client import is guarded so code runs without it.
+- **Shared helpers** in `libs/common`: `fetch.py` (`http_get` / `FetchResult`, httpx-gated — S0/S1 accept an injectable `fetch` callable so tests never hit the network) and `licensing.py` (`detect_license`, used by both S0 probe and S2 extract per §2 "ghi license từ S0/S2").
+
+## Per-stage code pattern (follow it when extending a stage)
+
+Every pipeline app has the same shape — match it:
+- **`pipeline.py`** holds the real logic: a `run(in_dir, out_dir, settings) -> XStats` that **streams** input shards, applies the stage, `record_drop(stage, reason)` on every rejection (fail-closed, never silently skip), writes an output shard, and calls `mark_done(tier, ...)`. `XStats` is a `@dataclass` with a `dropped: Counter[str]`.
+- **`__main__.py`** is a thin `click` CLI that loads settings, logs start, calls `pipeline.run`, logs done. No logic here.
+- **Specialized modules** hold the pure functions (e.g. cleaner: `normalize`/`lid`/`filters`/`dedup`/`pii`/`decontam`; probe: `probe.py`; crawler: `frontier.py`). Keep them pure and unit-testable.
+- **Gated optional backend** — the load-bearing pattern. Heavy/optional deps (httpx, trafilatura, pymupdf, datatrove, fasttext/GlotLID, Presidio, pyarrow) are imported behind `try/except ImportError` into an `_x: Any = None` module global, with a **pure-Python fallback** (stdlib HTML stripper, VN/EN LID heuristic, regex-only PII, JSONL-instead-of-Parquet). This keeps the core runnable and every test green with zero heavy installs. Never add a hard top-level import of a heavy dep; gate it and provide a fallback (and add it to the mypy overrides).
+- **Determinism:** anything random (MinHash hash coefficients, sampling) is seeded from `settings.global_.seed`; use `hashlib` (blake2b), never Python's salted `hash()`. Dedup is per-source in S3 (`dedup.py`) but GLOBAL-with-ranking in S6 (`crossdedup.py`, Zyda-2) — that's the one sanctioned global dedup (§8.2).
+- **Data contract between stages** (JSONL records): crawl→`{source_url, html, crawl_ts, content_type}` · extract→`{id, text, source_url, crawl_ts, license, extractor}` · clean→adds `lang`/`pii_found`/`prov` · build→ChatML/ShareGPT/Alpaca with a `meta` block. An `tests/test_pipeline_e2e.py` exercises S1→S6 with an injected fetcher.
 
 ## Document conventions (respect when editing the spec)
 
