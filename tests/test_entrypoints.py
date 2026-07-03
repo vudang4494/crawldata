@@ -1,6 +1,7 @@
 """Entrypoint smoke tests — mỗi stage CLI chạy được (skeleton), không crash.
 
-Bắt các regression kiểu `LicenseTag.unknown` (probe crash runtime) trước khi merge,
+Bắt các regression kiểu truy cập LicenseTag như Enum attribute (probe crash
+runtime) trước khi merge,
 và verify các fail-closed guard chạy đúng ở runtime (§2, §5.4).
 """
 

@@ -1,4 +1,4 @@
-.PHONY: help install sync lint format type test audit docker-up docker-down dvc-repro run-service
+.PHONY: help install sync lint format type test audit verify docker-up docker-down dvc-repro run-service
 
 help:
 	@echo "Targets:"
@@ -9,6 +9,7 @@ help:
 	@echo "  type         mypy apps libs"
 	@echo "  test         pytest"
 	@echo "  audit        node .claude/skills/verify-design-spec/verify.mjs"
+	@echo "  verify       full gate: lock-check + spec scan + lint + type + test"
 	@echo "  docker-up    docker compose -f ops/docker-compose.yml up -d"
 	@echo "  docker-down  docker compose -f ops/docker-compose.yml down"
 	@echo "  dvc-repro    dvc repro"
@@ -34,6 +35,14 @@ test:
 
 audit:
 	node .claude/skills/verify-design-spec/verify.mjs
+
+# Gate đầy đủ trước khi merge — V1 lock, V2+V3 spec/compliance, V5 lint, V6 type, V7 test.
+verify:
+	uv lock --check
+	node .claude/skills/verify-design-spec/verify.mjs --target .
+	uv run ruff check apps libs tests
+	uv run mypy apps libs
+	uv run pytest -q
 
 docker-up:
 	docker compose -f ops/docker-compose.yml up -d

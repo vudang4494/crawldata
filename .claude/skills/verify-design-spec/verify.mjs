@@ -112,14 +112,23 @@ const missingTools = toolDefaults.filter(t => !spec.includes(t));
 if (missingTools.length) err(`default tool defaults absent from spec: ${missingTools.join(", ")}`);
 
 // ---------- 8. Optional: scan a target for spec violations ----------
+// Thư mục env/cache/build — không phải source của product, bỏ qua khi scan.
+// Verifier tự loại chính nó (SELF): bảng rule chứa các anti-pattern làm mẫu.
+const SELF = fileURLToPath(import.meta.url);
+const SKIP_DIRS = new Set([
+  "node_modules", ".venv", "venv", "__pycache__",
+  ".mypy_cache", ".pytest_cache", ".ruff_cache",
+  ".dvc", "dist", "build", "data",
+]);
+
 if (targetPath) scanTarget(resolve(targetPath));
 
 function walk(p) {
   const out = [];
   const st = statSync(p);
-  if (st.isFile()) return [p];
+  if (st.isFile()) return p === SELF ? [] : [p];
   for (const name of readdirSync(p)) {
-    if (name === "node_modules" || name.startsWith(".git")) continue;
+    if (SKIP_DIRS.has(name) || name.startsWith(".git") || name.endsWith(".egg-info")) continue;
     out.push(...walk(join(p, name)));
   }
   return out;

@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from crawl_datasets_cleaner.pipeline import run as clean_run
 from crawl_datasets_common.provenance import verify_provenance
 from crawl_datasets_common.settings import Settings
+from crawl_datasets_extractor import html_extract
 from crawl_datasets_extractor.html_extract import extract_html
 from crawl_datasets_extractor.pipeline import run as extract_run
 
@@ -27,16 +29,31 @@ _HTML = (
 )
 
 
-def test_extract_html_fallback_strips_boilerplate() -> None:
+def test_extract_html_fallback_strips_boilerplate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Ép fallback tường minh — env có thể đã cài trafilatura (gated backend),
+    # test phải deterministic bất kể trạng thái cài đặt.
+    monkeypatch.setattr(html_extract, "_trafilatura", None)
     res = extract_html(_HTML, primary="trafilatura")
     assert res is not None
     text, extractor, title = res
     assert "council approved" in text
     assert "var x = 1" not in text  # script bỏ
     assert "Home About Contact" not in text  # nav bỏ
-    # trafilatura chưa cài trong test env → fallback
     assert extractor == "htmlparser-fallback"
     assert title == "Transport plan"
+
+
+def test_extract_html_uses_trafilatura_when_installed() -> None:
+    """§4 — trafilatura là primary extractor; fallback chỉ khi thiếu backend."""
+    if html_extract._trafilatura is None:
+        pytest.skip("trafilatura chưa cài — backend optional")
+    res = extract_html(_HTML, primary="trafilatura")
+    assert res is not None
+    text, extractor, _title = res
+    assert "council approved" in text
+    assert extractor.startswith("trafilatura-")
 
 
 def test_extract_pipeline_drops_bad_records(tmp_path: Path) -> None:
@@ -77,8 +94,9 @@ def test_extract_reads_html_files_with_sidecar(tmp_path: Path) -> None:
     assert rec["source_url"] == "https://src.example/x" and rec["license"] == "cc0"
 
 
-def test_s2_to_s3_end_to_end(tmp_path: Path) -> None:
+def test_s2_to_s3_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """§3.1/§4/§5 — raw HTML → extract (S2) → clean (S3), provenance đầy đủ."""
+    monkeypatch.setattr(html_extract, "_trafilatura", None)  # fallback deterministic
     raw = tmp_path / "raw"
     raw.mkdir()
     (raw / "part-0.jsonl").write_text(

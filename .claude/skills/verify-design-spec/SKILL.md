@@ -71,7 +71,8 @@ Extend the two rule tables inside `verify.mjs` (`violations` and `cfgViolations`
 - The `[src]` / `[2nd]` / `[guess]` counts are informational, not gated — the doc's honest citation practice depends on humans, not this script. But the counts should never drop without justification (removed a source? or forgot to tag?).
 - Target scanner is a **linter, not a type-checker**. It catches obvious violations by pattern; it does not prove correctness. A file that passes still needs human review against the spec.
 - YAML rule engine reads files as text; comments containing violating strings will false-positive. Prefer keeping the violating patterns out of comments too — they're anti-patterns.
-- Scanner skips `node_modules/` and any `.git*` path; extend the walker in `verify.mjs` if new build directories appear (e.g. `.venv`, `dist`, `build/`).
+- Scanner skips env/cache/build dirs (`SKIP_DIRS` in `verify.mjs`: `node_modules`, `.venv`, `venv`, `__pycache__`, `.mypy_cache`, `.pytest_cache`, `.ruff_cache`, `.dvc`, `dist`, `build`, `data`, plus `*.egg-info` and any `.git*`) and **excludes itself** — its rule tables contain the anti-patterns as literals. Extend `SKIP_DIRS` if new build dirs appear.
+- The scanner has an explicit test suite: `tests/test_verifier.py` — one PASS/FAIL case per rule, plus skip-dir and self-exclusion cases. When you add a rule to `violations`/`cfgViolations`, add its case there (build the bad fixture by string concatenation so the test file itself doesn't match the rule).
 - The verifier resolves the spec at `../../../crawl-clean-dataset-service.md` relative to `verify.mjs`. If the spec is renamed or moved, update `SPEC_PATH` in `verify.mjs`.
 
 ## Provenance

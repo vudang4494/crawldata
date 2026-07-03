@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import sys
 import unicodedata
 from pathlib import Path
 
+import pytest
 from crawl_datasets_cleaner.decontam import Decontaminator
 from crawl_datasets_cleaner.dedup import LSHIndex, MinHasher, content_hash, scope_key
 from crawl_datasets_cleaner.filters import (
@@ -84,8 +86,10 @@ def test_gopher_repetition_flags_dupes() -> None:
     )
 
 
-def test_build_presidio_none_without_backend() -> None:
-    # Presidio không cài trong test env → gate trả None (fallback regex-only, §5.5).
+def test_build_presidio_none_without_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Ép thiếu backend (env có thể đã cài presidio — gated backend):
+    # gate phải trả None → fallback regex-only (§5.5), deterministic bất kể env.
+    monkeypatch.setitem(sys.modules, "presidio_analyzer", None)
     assert build_presidio() is None
 
 

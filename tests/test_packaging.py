@@ -60,6 +60,36 @@ def test_common_ships_py_typed() -> None:
     )
 
 
+# Backend nặng theo gated-backend pattern (CLAUDE.md) — chỉ được là extra.
+HEAVY_OPTIONAL_BACKENDS = {
+    "umap-learn",
+    "hdbscan",
+    "numba",
+    "llvmlite",
+    "sentence-transformers",
+    "flagembedding",
+    "torch",
+    "playwright",
+}
+
+
+def _dep_name(spec: str) -> str:
+    return re.split(r"[\s\[<>=!~;]", spec, maxsplit=1)[0].lower()
+
+
+def test_heavy_backends_are_extras_not_base_deps() -> None:
+    """Dep nặng phải nằm trong optional-dependencies, không phải base deps.
+
+    Bắt bug: profiler khai umap-learn/hdbscan làm base dep → universal
+    resolution kéo llvmlite 0.36 (sdist-only) → `uv sync`/`uv run` vỡ build
+    trên Python 3.13 dù code không hề import chúng (clustering là P1 hook).
+    """
+    for p in _member_pyprojects():
+        deps = tomllib.loads(p.read_text())["project"].get("dependencies", [])
+        heavy = {_dep_name(d) for d in deps} & HEAVY_OPTIONAL_BACKENDS
+        assert not heavy, f"{p}: {sorted(heavy)} phải là extra, không phải base dep"
+
+
 def test_uv_run_package_refs_are_real_packages() -> None:
     """`uv run --package X` phải trỏ tên package thật (không phải tên thư mục).
 
