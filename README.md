@@ -16,7 +16,8 @@ Reference skeleton cho service dựng dataset fine-tuning (SFT/instruction-tunin
 │   ├── profiler/               # S4 — Profile + suggestions
 │   ├── builder/                # S5 — Build (ChatML/ShareGPT/Alpaca → Parquet)
 │   ├── integrator/             # S6 — Integrate (cross-dedup + mix)
-│   └── service/                # FastAPI + arq
+│   ├── agent/                  # §14 — Agent intake (URL+nhu cầu → LLM local → DatasetPlan → pipeline)
+│   └── service/                # FastAPI + arq (+ /agent/sessions)
 ├── libs/
 │   └── common/                 # Shared: config, schema, storage, observability, provenance
 ├── configs/
@@ -65,6 +66,9 @@ make run-worker    # arq worker chạy job crawl/build/integrate
 
 # Gate đầy đủ trước khi merge (lock + spec scan + lint + type + test)
 make verify
+
+# Agent intake (§14) — cần Ollama chạy model local (mặc định gemma4:e4b)
+uv run crawl-datasets-agent --url https://nguon.vn --need "SFT song ngữ ~100 trang" --out data/proj
 ```
 
 ## Phased build (§12)

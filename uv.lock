@@ -15,6 +15,7 @@ supported-markers = [
 
 [manifest]
 members = [
+    "crawl-datasets-agent",
     "crawl-datasets-builder",
     "crawl-datasets-cleaner",
     "crawl-datasets-common",
@@ -780,6 +781,48 @@ wheels = [
 ]
 
 [[package]]
+name = "crawl-datasets-agent"
+version = "1.3.0"
+source = { editable = "apps/agent" }
+dependencies = [
+    { name = "click", marker = "python_full_version < '3.14'" },
+    { name = "crawl-datasets-builder", marker = "python_full_version < '3.14'" },
+    { name = "crawl-datasets-cleaner", marker = "python_full_version < '3.14'" },
+    { name = "crawl-datasets-common", marker = "python_full_version < '3.14'" },
+    { name = "crawl-datasets-crawler", marker = "python_full_version < '3.14'" },
+    { name = "crawl-datasets-extractor", marker = "python_full_version < '3.14'" },
+    { name = "crawl-datasets-probe", marker = "python_full_version < '3.14'" },
+    { name = "crawl-datasets-profiler", marker = "python_full_version < '3.14'" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "mypy", marker = "python_full_version < '3.14'" },
+    { name = "pytest", marker = "python_full_version < '3.14'" },
+    { name = "ruff", marker = "python_full_version < '3.14'" },
+]
+llm = [
+    { name = "httpx", marker = "python_full_version < '3.14'" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "click", specifier = ">=8.1" },
+    { name = "crawl-datasets-builder", editable = "apps/builder" },
+    { name = "crawl-datasets-cleaner", editable = "apps/cleaner" },
+    { name = "crawl-datasets-common", editable = "libs/common" },
+    { name = "crawl-datasets-crawler", editable = "apps/crawler" },
+    { name = "crawl-datasets-extractor", editable = "apps/extractor" },
+    { name = "crawl-datasets-probe", editable = "apps/probe" },
+    { name = "crawl-datasets-profiler", editable = "apps/profiler" },
+    { name = "httpx", marker = "extra == 'llm'", specifier = ">=0.27" },
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.2" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4" },
+]
+provides-extras = ["llm", "dev"]
+
+[[package]]
 name = "crawl-datasets-builder"
 version = "1.3.0"
 source = { editable = "apps/builder" }
@@ -839,6 +882,11 @@ lid = [
     { name = "fasttext-wheel", marker = "python_full_version < '3.14'" },
     { name = "huggingface-hub", marker = "python_full_version < '3.14'" },
 ]
+quality = [
+    { name = "huggingface-hub", marker = "python_full_version < '3.14'" },
+    { name = "torch", marker = "python_full_version < '3.14'" },
+    { name = "transformers", marker = "python_full_version < '3.14'" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -849,6 +897,7 @@ requires-dist = [
     { name = "flagembedding", marker = "extra == 'embed'", specifier = ">=1.2" },
     { name = "ftfy", specifier = ">=6.2" },
     { name = "huggingface-hub", marker = "extra == 'lid'", specifier = ">=0.20" },
+    { name = "huggingface-hub", marker = "extra == 'quality'", specifier = ">=0.20" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },
     { name = "nemo-curator", marker = "extra == 'gpu-dedup'", specifier = ">=0.4" },
     { name = "presidio-analyzer", specifier = ">=2.2" },
@@ -856,8 +905,10 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.2" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4" },
     { name = "sentence-transformers", marker = "extra == 'embed'", specifier = ">=3.0" },
+    { name = "torch", marker = "extra == 'quality'", specifier = ">=2.2" },
+    { name = "transformers", marker = "extra == 'quality'", specifier = ">=4.40" },
 ]
-provides-extras = ["lid", "embed", "gpu-dedup", "dev"]
+provides-extras = ["lid", "embed", "quality", "gpu-dedup", "dev"]
 
 [[package]]
 name = "crawl-datasets-common"
@@ -1085,6 +1136,7 @@ version = "1.3.0"
 source = { editable = "apps/service" }
 dependencies = [
     { name = "arq", marker = "python_full_version < '3.14'" },
+    { name = "crawl-datasets-agent", marker = "python_full_version < '3.14'" },
     { name = "crawl-datasets-builder", marker = "python_full_version < '3.14'" },
     { name = "crawl-datasets-common", marker = "python_full_version < '3.14'" },
     { name = "crawl-datasets-crawler", marker = "python_full_version < '3.14'" },
@@ -1105,6 +1157,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "arq", specifier = ">=0.25" },
+    { name = "crawl-datasets-agent", editable = "apps/agent" },
     { name = "crawl-datasets-builder", editable = "apps/builder" },
     { name = "crawl-datasets-common", editable = "libs/common" },
     { name = "crawl-datasets-crawler", editable = "apps/crawler" },

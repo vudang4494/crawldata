@@ -8,6 +8,7 @@ dependencies = [
     "crawl-datasets-crawler",
     "crawl-datasets-builder",
     "crawl-datasets-integrator",
+    "crawl-datasets-agent",
     "fastapi>=0.111",
     "uvicorn[standard]>=0.30",
     "arq>=0.25",

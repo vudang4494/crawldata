@@ -69,12 +69,25 @@ async def integrate_job(ctx: dict[str, Any], payload: dict[str, Any]) -> dict[st
     return await asyncio.to_thread(_run_integrate, payload)
 
 
+def _run_plan(payload: dict[str, Any]) -> dict[str, Any]:
+    from crawl_datasets_agent.plan import DatasetPlan
+    from crawl_datasets_agent.run_plan import execute_plan
+
+    plan = DatasetPlan(**payload["plan"])
+    return execute_plan(plan, load_settings(), Path(payload.get("out", "data/agent")))
+
+
+async def plan_job(ctx: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    """§14 — chạy DatasetPlan đã duyệt: S1→S5 dưới out_root."""
+    return await asyncio.to_thread(_run_plan, payload)
+
+
 _service = load_settings().service
 
 
 class WorkerSettings:
     """arq entrypoint — tên function phải khớp chuỗi enqueue_job() ở main.py."""
 
-    functions = [crawl_job, build_job, integrate_job]
+    functions = [crawl_job, build_job, integrate_job, plan_job]
     redis_settings = RedisSettings.from_dsn(_service.redis_url)
     max_jobs = _service.max_jobs

@@ -398,6 +398,12 @@ integrate:
 service:
   redis_url: redis://localhost:6379          # arq queue (§1)
   max_jobs: 4
+agent:                                       # §14 — intake agent (extension)
+  base_url: http://localhost:11434/v1        # OpenAI-compatible (Ollama/llama.cpp)
+  model: gemma4:e4b                          # nâng cấp: hf.co/unsloth/gemma-4-26B-A4B-it-qat-GGUF:Q4_K_M
+  temperature: 0.2
+  timeout_s: 120
+  max_rounds: 3                              # số vòng agent hỏi lại user
 ```
 
 ### 9.4 Observability
@@ -448,7 +454,7 @@ service:
 | **P0 MVP** | S0 probe + S1 (httpx/Scrapy tĩnh) + S2 trafilatura + S3 tối thiểu (NFC+ftfy → GlotLID → Gopher+C4 → exact+MinHash dedup → Presidio) + S5 ChatML JSONL. datatrove backbone. DVC version. Seed + checkpoint + Prometheus counter. | 1 nguồn → dataset sạch, reproducible, end-to-end |
 | **P1** | Playwright pool (JS), S4 profiling+suggestion, decontamination, quality classifier, VN filter overrides | Chất lượng + coverage |
 | **P2** | S6 integrate (cross-dedup Zyda-2 + mix ratio), NeMo GPU dedup trên A100 cho scale lớn, semantic dedup | Scale + trộn dataset cũ |
-| **P3** | FastAPI service hoàn chỉnh (job queue, status, API), Grafana dashboard, Langfuse nếu thêm LLM-judge/synthetic | Service hóa |
+| **P3** | FastAPI service hoàn chỉnh (job queue, status, API), **agent intake §14** (URL+nhu cầu → LLM local lập DatasetPlan), Grafana dashboard, Langfuse nếu thêm LLM-judge/synthetic | Service hóa |
 
 Nguyên tắc: **đơn giản nhất chạy được trước** (datatrove CPU local), chỉ thêm GPU/NeMo/browser/LLM khi đo được cần.
 
@@ -469,6 +475,19 @@ Nguyên tắc: **đơn giản nhất chạy được trước** (datatrove CPU l
 | Verifier exception coi là PASS | Rác lọt (fail-open) | Fail-closed: exception=FAIL |
 | Neural extractor vì "nghe xịn" | Chậm + F1 thua heuristic trên article `[src]` | trafilatura default |
 | NeMo fuzzy dedup trên CPU | Không chạy (bắt buộc GPU) `[src]` | Dồn A100 burst hoặc dùng datatrove CPU |
+| LLM agent tự quyết gate (robots/license/PII) | Mất fail-closed — plan "sáng tạo" lách kiểm soát | §14: plan là subset an toàn của §9.3, không có field nới gate; Pydantic validate |
+
+---
+
+## 14. Agent intake layer (extension — P3)
+
+Lớp điều phối đặt TRÊN pipeline, không thay thế gate nào: user đưa `{URL + nhu cầu}` → LLM local phân tích, hỏi lại khi thiếu thông tin → `DatasetPlan` → user duyệt → pipeline deterministic chạy S1→S5.
+
+- **Flow:** prompt `{url, need}` → S0 probe (§2) → LLM đọc source_profile + nhu cầu → sinh tiêu chí chi tiết → hỏi lại user (≤ `agent.max_rounds` vòng) → `DatasetPlan` (Pydantic) → confirm → S1 crawl → S2 extract → S3 clean → S4 profile → S5 build.
+- **LLM chỉ đề xuất, không quyết định gate:** plan là subset an toàn của §9.3 (seeds/depth/max_pages/render/lang_allow/format/quality_min_score) — không tồn tại field robots/license/dedup-scope/PII; mọi gate vẫn enforce trong pipeline (xem failure mode §13).
+- **Backend LLM:** model GGUF local (Gemma QAT) qua API OpenAI-compatible — một code path phủ Ollama (`/v1`), llama.cpp server, LM Studio `[2nd]`. Model 26B-A4B QAT chạy được trên máy 24GB unified memory nhưng sát RAM — đổi model nhỏ hơn chỉ là 1 key config `[guess]`.
+- **Fail-closed:** LLM trả JSON sai → retry kèm phản hồi lỗi (tối đa `max_retries`), hết lượt → RuntimeError; server LLM không chạy → lỗi tường minh (CLI) / 503-502 (API). Pipeline KHÔNG phụ thuộc agent — các stage chạy độc lập như cũ.
+- **Giao diện:** CLI `crawl-datasets-agent --url --need --out` (hỏi-đáp terminal, confirm trước khi chạy) + API `/agent/sessions` → `/answers` → `/execute` (enqueue `plan_job` qua arq). Session API in-memory per-process — multi-worker cần chuyển Redis `[guess]`.
 
 ---
 

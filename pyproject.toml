@@ -12,9 +12,14 @@ members = ["apps/*", "libs/*"]
 [tool.uv.sources]
 # Member phụ thuộc member khác được resolve từ workspace, không phải PyPI.
 crawl-datasets-common = { workspace = true }
+crawl-datasets-probe = { workspace = true }
 crawl-datasets-crawler = { workspace = true }
+crawl-datasets-extractor = { workspace = true }
+crawl-datasets-cleaner = { workspace = true }
+crawl-datasets-profiler = { workspace = true }
 crawl-datasets-builder = { workspace = true }
 crawl-datasets-integrator = { workspace = true }
+crawl-datasets-agent = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -43,6 +48,7 @@ explicit_package_bases = true
 # resolve cross-package import, vừa báo "source file found twice" (apps/ vs site-packages).
 mypy_path = [
     "libs/common/src",
+    "apps/agent/src",
     "apps/builder/src",
     "apps/cleaner/src",
     "apps/crawler/src",

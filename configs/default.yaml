@@ -77,3 +77,10 @@ integrate:
 service:
   redis_url: redis://localhost:6379   # §1 — arq queue
   max_jobs: 4
+
+agent:                     # §14 — intake agent (LLM local, API OpenAI-compatible)
+  base_url: http://localhost:11434/v1   # Ollama /v1 (llama.cpp/LM Studio tương thích)
+  model: gemma4:e4b        # nâng cấp: hf.co/unsloth/gemma-4-26B-A4B-it-qat-GGUF:Q4_K_M
+  temperature: 0.2
+  timeout_s: 120
+  max_rounds: 3            # số vòng agent được hỏi lại user

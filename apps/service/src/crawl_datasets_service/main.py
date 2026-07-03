@@ -8,13 +8,21 @@ Endpoints (theo spec §1):
   GET  /datasets/{id}/profile -> stats + suggestions
   GET  /metrics             -> Prometheus exposition
   GET  /healthz
+
+Agent intake (§14):
+  POST /agent/sessions               {url, need}  -> {session_id, questions|plan}
+  POST /agent/sessions/{id}/answers  {answers[]}  -> {questions|plan}
+  POST /agent/sessions/{id}/execute  -> enqueue plan_job (JobAck)
 """
 
 from __future__ import annotations
 
+import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
+from crawl_datasets_agent.intake import IntakeSession, Step
 from crawl_datasets_common.observability import configure_logging
 from crawl_datasets_common.settings import load_settings
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -121,6 +129,108 @@ async def enqueue_integrate(
 ) -> JobAck:
     payload = {"new_dataset": dataset_id, **req.model_dump()}
     return await _enqueue(request, "integrate_job", payload)
+
+
+# --- Agent intake (§14) -------------------------------------------------------
+# Session in-memory per-process (P-A; multi-worker → chuyển Redis). Test inject:
+# `app.state.agent_llm` (fake LLM), `app.state.agent_fetch`, `app.state.agent_dir`.
+
+
+class AgentSessionRequest(BaseModel):
+    url: str
+    need: str
+
+
+class AgentAnswersRequest(BaseModel):
+    answers: list[str]
+
+
+class AgentStepResponse(BaseModel):
+    session_id: str
+    done: bool
+    questions: list[str] = Field(default_factory=list)
+    plan: dict[str, Any] | None = None
+
+
+def _sessions(request: Request) -> dict[str, IntakeSession]:
+    if not hasattr(request.app.state, "agent_sessions"):
+        request.app.state.agent_sessions = {}
+    sessions: dict[str, IntakeSession] = request.app.state.agent_sessions
+    return sessions
+
+
+def _step_response(sid: str, step: Step) -> AgentStepResponse:
+    return AgentStepResponse(
+        session_id=sid,
+        done=step.done,
+        questions=step.questions,
+        plan=step.plan.model_dump() if step.plan is not None else None,
+    )
+
+
+@app.post("/agent/sessions", response_model=AgentStepResponse)
+def agent_start(req: AgentSessionRequest, request: Request) -> AgentStepResponse:
+    """§14 — probe URL → agent phân tích nhu cầu → questions hoặc plan."""
+    from crawl_datasets_probe.pipeline import run as probe_run
+
+    settings = load_settings()
+    sid = uuid.uuid4().hex[:12]
+    out_dir = Path(
+        getattr(request.app.state, "agent_dir", "data/agent")
+    ) / sid / "s0"
+    fetch = getattr(request.app.state, "agent_fetch", None)
+    profile_s0 = probe_run(req.url, out_dir, settings, fetch=fetch)
+
+    llm = getattr(request.app.state, "agent_llm", None)
+    if llm is None:
+        from crawl_datasets_agent.llm import ChatLLM
+
+        try:
+            llm = ChatLLM(settings.agent)
+        except RuntimeError as exc:  # thiếu httpx backend — 503 tường minh
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    session = IntakeSession(
+        req.url, req.need, profile_s0, llm, max_rounds=settings.agent.max_rounds
+    )
+    try:
+        step = session.start()
+    except RuntimeError as exc:  # LLM không trả plan hợp lệ (§14 fail-closed)
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    _sessions(request)[sid] = session
+    return _step_response(sid, step)
+
+
+@app.post("/agent/sessions/{sid}/answers", response_model=AgentStepResponse)
+def agent_answer(
+    sid: str, req: AgentAnswersRequest, request: Request
+) -> AgentStepResponse:
+    session = _sessions(request).get(sid)
+    if session is None:
+        raise HTTPException(status_code=404, detail="session không tồn tại")
+    try:
+        step = session.answer(req.answers)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return _step_response(sid, step)
+
+
+@app.post("/agent/sessions/{sid}/execute", response_model=JobAck)
+async def agent_execute(sid: str, request: Request) -> JobAck:
+    """Enqueue plan đã chốt → worker `plan_job` chạy S1→S5."""
+    session = _sessions(request).get(sid)
+    if session is None:
+        raise HTTPException(status_code=404, detail="session không tồn tại")
+    # Plan nằm ở message assistant cuối đã validate — dựng lại từ session state.
+    last_plan = getattr(session, "final_plan", None)
+    if last_plan is None:
+        raise HTTPException(status_code=409, detail="session chưa có plan chốt")
+    out = str(
+        Path(getattr(request.app.state, "agent_dir", "data/agent")) / sid
+    )
+    return await _enqueue(
+        request, "plan_job", {"plan": last_plan.model_dump(), "out": out}
+    )
 
 
 @app.get("/datasets/{dataset_id}/profile")

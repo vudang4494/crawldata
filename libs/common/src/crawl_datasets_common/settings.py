@@ -155,6 +155,17 @@ class IntegrateSettings(BaseModel):
         return v
 
 
+class AgentSettings(BaseModel):
+    """§14 — agent intake: LLM local qua API OpenAI-compatible (Ollama/llama.cpp)."""
+
+    base_url: str = "http://localhost:11434/v1"
+    # Nâng cấp: hf.co/unsloth/gemma-4-26B-A4B-it-qat-GGUF:Q4_K_M (~16GB, sát 24GB RAM)
+    model: str = "gemma4:e4b"
+    temperature: float = 0.2
+    timeout_s: float = 120.0
+    max_rounds: int = 3  # số vòng agent được hỏi lại user tối đa
+
+
 class Settings(BaseModel):
     """Top-level — khớp §9.3 config skeleton."""
 
@@ -166,6 +177,7 @@ class Settings(BaseModel):
     build: BuildSettings = Field(default_factory=BuildSettings)
     integrate: IntegrateSettings = Field(default_factory=IntegrateSettings)
     service: ServiceSettings = Field(default_factory=ServiceSettings)
+    agent: AgentSettings = Field(default_factory=AgentSettings)
 
     model_config = {"populate_by_name": True}
 
