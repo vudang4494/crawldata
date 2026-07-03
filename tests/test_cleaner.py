@@ -204,6 +204,34 @@ def test_pii_vn_regex_redacts_and_respects_flag() -> None:
     assert "phone_vn" not in types2 and "cccd_cmnd" not in types2
 
 
+def test_presidio_gated_by_lang() -> None:
+    # §5.5 — NER English chỉ áp cho doc thuộc pii.presidio_langs (mặc định [en]);
+    # doc VN chỉ chạy VN regex — EN NER trên VN false-positive phá text.
+    from crawl_datasets_cleaner.pipeline import DocCleaner
+
+    class _OverRedactingNER:
+        """Giả lập NER EN over-redact: mọi lời gọi đều thay toàn bộ text."""
+
+        def redact(self, text: str) -> tuple[str, list[str]]:
+            return "<PERSON>", ["PERSON"]
+
+    cleaner = DocCleaner(Settings())
+    cleaner.presidio = _OverRedactingNER()
+
+    rec_vi, reason_vi = cleaner.clean_one(
+        {"text": GOOD_VI, "source_url": "https://vi.example/1", "license": "cc-by"}
+    )
+    assert reason_vi is None and rec_vi is not None
+    assert "PERSON" not in rec_vi["pii_found"]
+    assert "tiếng Việt" in rec_vi["text"]  # text VN nguyên vẹn, không qua NER EN
+
+    rec_en, reason_en = cleaner.clean_one(
+        {"text": GOOD_EN, "source_url": "https://en.example/1", "license": "cc-by"}
+    )
+    assert reason_en is None and rec_en is not None
+    assert rec_en["text"] == "<PERSON>" and "PERSON" in rec_en["pii_found"]
+
+
 def test_decontam_13gram_match() -> None:
     bench = "the capital of france is paris and it has been for many centuries indeed"
     dec = Decontaminator.from_texts(13, [bench])

@@ -2,7 +2,9 @@
 
 FineWeb tối thiểu: email + public IP. VN thêm: CCCD/CMND (9–12 số), SĐT +84 (§11).
 Presidio (NER person/location) là backend optional, nặng (load spaCy) → chỉ init khi
-`pii.backend == presidio` VÀ cài sẵn (build_presidio → None nếu không).
+`pii.backend == presidio` VÀ cài sẵn (build_presidio → None nếu không). Pipeline gate
+NER theo lang (`pii.presidio_langs`, §5.5): NER English trên text VN false-positive
+nặng (redact từ thường thành PERSON/LOCATION) — doc ngoài danh sách chỉ chạy regex.
 """
 
 from __future__ import annotations

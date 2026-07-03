@@ -76,6 +76,8 @@ class MinHashConfig(BaseModel):
 class PIIConfig(BaseModel):
     backend: str = Field(default="presidio")
     vi_regex: bool = True  # §11 — CCCD/CMND/SĐT +84
+    # §5.5 — NER chỉ áp cho lang có model; EN NER trên VN → false-positive nặng.
+    presidio_langs: list[str] = Field(default_factory=lambda: ["en"])
 
 
 class DecontamConfig(BaseModel):

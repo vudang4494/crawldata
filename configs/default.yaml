@@ -44,6 +44,7 @@ clean:
   pii:
     backend: presidio
     vi_regex: true         # §11 — CCCD/CMND/SĐT +84
+    presidio_langs: [en]   # §5.5 — NER chỉ cho lang có model; doc VN dùng VN regex
   decontam:
     benchmarks: [mmlu, aime, math500, mgsm]
     ngram: 13

@@ -134,9 +134,12 @@ class DocCleaner:
                 return None, "minhash_dup"
         passed.append("dedup")
 
+        # §5.5 — Presidio NER chỉ cho lang thuộc pii.presidio_langs (EN NER trên
+        # VN → false-positive redact từ thường); doc khác dựa regex (§11).
+        ner = self.presidio if lang in self.clean.pii.presidio_langs else None
         redacted, pii_types = redact_pii(
-            text, vi_regex=self.clean.pii.vi_regex, presidio=self.presidio
-        )  # §5.5
+            text, vi_regex=self.clean.pii.vi_regex, presidio=ner
+        )
         passed.append("pii")
 
         if self.decontam.is_contaminated(text):  # §5.6

@@ -240,6 +240,7 @@ Semantic dup   → embed (BGE-M3, 4090) → ANN (Qdrant/faiss) → cosine>thresh
 - **Presidio** (analyzer + anonymizer, NER-based) — email, phone, IP, person, location `[2nd]`. NeMo có `PIIRedactor` (replace/redact) `[src]`.
 - FineWeb tối thiểu: anonymize email + public IP `[src]`.
 - VN: PII patterns khác (CMND/CCCD 9–12 số, SĐT +84...) → thêm regex riêng, đừng chỉ dựa NER English.
+- Chiều ngược lại cũng cấm: NER English áp lên text tiếng Việt → false-positive tràn lan (từ thường bị redact thành PERSON/LOCATION, phá nát text). Presidio chỉ chạy cho doc thuộc `presidio_langs` (mặc định `[en]`); doc VN dùng VN regex `[2nd]`.
 - Fail-closed: regex high-recall cho định danh nhạy cảm; NER cho phần còn lại.
 
 ### 5.6 Decontamination
@@ -382,7 +383,7 @@ clean:
   gopher_quality: {min_words: 50, max_words: 100000, ...}
   vi_overrides: {use_vi_stopwords: true, disable_word_len_rule: true}
   minhash: {ngram: 5, num_hashes: 112, bands: 14, rows: 8, scope: per_source}
-  pii: {backend: presidio, vi_regex: true}
+  pii: {backend: presidio, vi_regex: true, presidio_langs: [en]}
   decontam: {benchmarks: [mmlu, aime, math500, mgsm], ngram: 13}
   quality: {enabled: false, backend: fasttext, model_path: null, positive_label: __label__hq, min_score: 0.5}  # §5.3 (P1)
 profile:
@@ -457,6 +458,7 @@ Nguyên tắc: **đơn giản nhất chạy được trước** (datatrove CPU l
 | Rủi ro | Hệ quả | Phòng |
 |---|---|---|
 | Áp ngưỡng filter English cho VN | Loại oan tiếng Việt / giữ rác | VN overrides, tune trên sample VN |
+| Presidio NER English chạy trên doc VN | False-positive redact từ thường → phá nát text VN | Gate theo lang: `pii.presidio_langs` (§5.5); VN dùng regex riêng (§11) |
 | Bỏ NFC normalize | Dedup sót, so khớp sai | NFC trước mọi hash/dedup |
 | Semantic dedup chạy sớm/toàn tập | Đắt, chậm, OOM | Chạy sau near-dup, trên tập nhỏ |
 | Global dedup thay per-source | FineWeb ablate: per-crawl tốt hơn `[src]` | Dedup per-source/per-crawl |
