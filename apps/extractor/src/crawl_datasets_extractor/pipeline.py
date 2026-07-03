@@ -17,13 +17,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from crawl_datasets_common.licensing import detect_license
 from crawl_datasets_common.observability import (
     get_logger,
     record_drop,
     records_total,
     stage_timer,
 )
-from crawl_datasets_common.schema import stable_id
+from crawl_datasets_common.schema import LICENSE_TAGS, stable_id
 from crawl_datasets_common.settings import Settings
 from crawl_datasets_common.storage import StorageLayout, mark_done
 
@@ -71,6 +72,10 @@ def _extract_one(
     html = raw.get("html") or raw.get("content")
     pdf_path = raw.get("pdf_path")
 
+    # §2 — ghi license per-record từ S2: raw license nếu hợp lệ, else detect từ HTML.
+    raw_license = raw.get("license")
+    license_ = raw_license if raw_license in LICENSE_TAGS else None
+
     title: str | None = None
     if "pdf" in content_type or pdf_path:
         if not isinstance(pdf_path, str):
@@ -84,6 +89,8 @@ def _extract_one(
         if res_html is None:
             return None, "empty_extract_html"
         text, extractor, title = res_html
+        if license_ is None:
+            license_ = detect_license(html)
     else:
         return None, "no_content"
 
@@ -92,7 +99,7 @@ def _extract_one(
         "text": text,
         "source_url": source_url,
         "crawl_ts": raw.get("crawl_ts"),
-        "license": raw.get("license", "unknown"),
+        "license": license_ or "unknown",
         "extractor": extractor,
         "title": title or raw.get("title"),
     }

@@ -46,6 +46,8 @@ module = [
     "trafilatura.*",
     "pymupdf.*",
     "fitz.*",
+    "pyarrow.*",
+    "httpx.*",
 ]
 ignore_missing_imports = true
 
