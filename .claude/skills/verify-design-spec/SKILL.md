@@ -50,10 +50,12 @@ Python/TS/JS violations:
 - `license = "unknown"` or `"license": "unknown"` — §2/§13 requires `license:unknown` records be excluded from release datasets.
 - `normalize = "NFKD"` — §5.1/§11 requires NFC for Vietnamese.
 - `lang_id = "cld3"` — §5.2 requires GlotLID-M v3 over CLD3.
+- `LicenseTag.<attr>` — §7.2 `LicenseTag` is a `Literal`, not an `Enum`; attribute access crashes at runtime (use `UNKNOWN_LICENSE` or a string value).
 
 YAML/TOML config violations:
 - `scope: global` under `minhash` — §5.4/§13 requires `per_source` / `per_crawl`.
 - `respect_robots: false` — §2 legal gate is fail-closed.
+- `pyproject.toml` missing `[project]` (or `[tool.uv.workspace]` on the root) — PEP 621: uv can't build/resolve the package.
 
 Extend the two rule tables inside `verify.mjs` (`violations` and `cfgViolations`) as new spec-derived invariants come up.
 
