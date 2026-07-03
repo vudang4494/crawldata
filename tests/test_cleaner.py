@@ -8,9 +8,14 @@ from pathlib import Path
 
 from crawl_datasets_cleaner.decontam import Decontaminator
 from crawl_datasets_cleaner.dedup import LSHIndex, MinHasher, content_hash, scope_key
-from crawl_datasets_cleaner.filters import c4_filter, fineweb_custom, gopher_quality
+from crawl_datasets_cleaner.filters import (
+    c4_filter,
+    fineweb_custom,
+    gopher_quality,
+    gopher_repetition,
+)
 from crawl_datasets_cleaner.normalize import normalize_text
-from crawl_datasets_cleaner.pii import redact_pii
+from crawl_datasets_cleaner.pii import build_presidio, redact_pii
 from crawl_datasets_cleaner.pipeline import run
 from crawl_datasets_common.provenance import verify_provenance
 from crawl_datasets_common.settings import GopherQuality, Settings, VIOverrides
@@ -68,6 +73,20 @@ def test_c4_drops_lorem_ipsum_and_untermined_lines() -> None:
 def test_fineweb_flags_list_like() -> None:
     assert fineweb_custom("- a\n- b\n- c\n- d") == "fineweb_list_like"
     assert fineweb_custom(GOOD_EN) is None
+
+
+def test_gopher_repetition_flags_dupes() -> None:
+    assert gopher_repetition(GOOD_EN) is None  # doc tốt không bị cờ
+    assert gopher_repetition("copy this line.\n" * 20) == "rep_dup_lines"
+    # 5-gram lặp nhiều → cờ top/dup n-gram (§5.3 mở rộng)
+    assert (gopher_repetition("alpha beta gamma delta epsilon " * 15) or "").startswith(
+        "rep_"
+    )
+
+
+def test_build_presidio_none_without_backend() -> None:
+    # Presidio không cài trong test env → gate trả None (fallback regex-only, §5.5).
+    assert build_presidio() is None
 
 
 def test_minhash_is_deterministic_by_seed() -> None:

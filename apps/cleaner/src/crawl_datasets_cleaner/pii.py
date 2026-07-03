@@ -1,13 +1,14 @@
-"""PII scrubbing (§5.5, §11) — VN regex high-recall (fail-closed).
+"""PII scrubbing (§5.5, §11) — VN regex high-recall (fail-closed) + Presidio NER.
 
 FineWeb tối thiểu: email + public IP. VN thêm: CCCD/CMND (9–12 số), SĐT +84 (§11).
-Presidio (NER person/location) là backend optional, nặng (load spaCy) → hook riêng,
-KHÔNG auto-init trong pipeline P0.
+Presidio (NER person/location) là backend optional, nặng (load spaCy) → chỉ init khi
+`pii.backend == presidio` VÀ cài sẵn (build_presidio → None nếu không).
 """
 
 from __future__ import annotations
 
 import re
+from typing import Any
 
 # §5.5/§11 — high-recall cho định danh nhạy cảm.
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
@@ -24,12 +25,43 @@ _RULES: tuple[tuple[re.Pattern[str], str, str], ...] = (
 )
 
 
-def redact_pii(text: str, *, vi_regex: bool = True) -> tuple[str, list[str]]:
-    """Redact PII bằng regex. Trả (text_đã_redact, các_loại_PII_tìm_thấy).
+class PresidioRedactor:
+    """NER-based redaction (person/location/…) — mở rộng regex (§5.5). Lazy spaCy."""
 
-    vi_regex=False → chỉ email + IP (FineWeb tối thiểu, §5.5).
+    def __init__(self) -> None:
+        from presidio_analyzer import AnalyzerEngine
+        from presidio_anonymizer import AnonymizerEngine
+
+        self._analyzer = AnalyzerEngine()
+        self._anonymizer = AnonymizerEngine()
+
+    def redact(self, text: str) -> tuple[str, list[str]]:
+        results = self._analyzer.analyze(text=text, language="en")
+        if not results:
+            return text, []
+        out = self._anonymizer.anonymize(text=text, analyzer_results=results)
+        return out.text, sorted({r.entity_type for r in results})
+
+
+def build_presidio() -> PresidioRedactor | None:
+    """Init Presidio nếu cài sẵn; None nếu thiếu backend/model (fallback regex-only)."""
+    try:
+        return PresidioRedactor()
+    except (ImportError, OSError, ValueError, RuntimeError):
+        return None
+
+
+def redact_pii(
+    text: str, *, vi_regex: bool = True, presidio: Any = None
+) -> tuple[str, list[str]]:
+    """Redact PII. Trả (text_redact, loại_PII). Presidio (nếu có) chạy trước regex.
+
+    vi_regex=False → regex chỉ email + IP (FineWeb tối thiểu, §5.5).
     """
     found: list[str] = []
+    if presidio is not None:
+        text, ner_types = presidio.redact(text)
+        found.extend(ner_types)
     for pattern, tag, name in _RULES:
         if not vi_regex and name in {"phone_vn", "cccd_cmnd"}:
             continue
@@ -37,12 +69,3 @@ def redact_pii(text: str, *, vi_regex: bool = True) -> tuple[str, list[str]]:
         if count:
             found.append(name)
     return text, found
-
-
-def presidio_available() -> bool:
-    """True nếu Presidio backend cài sẵn (NER person/location — mở rộng regex)."""
-    try:
-        import presidio_analyzer  # noqa: F401
-    except ImportError:
-        return False
-    return True

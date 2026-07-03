@@ -38,7 +38,7 @@ from .dedup import LSHIndex, MinHasher, content_hash, scope_key
 from .filters import c4_filter, fineweb_custom, gopher_quality, gopher_repetition
 from .lid import LanguageIdentifier
 from .normalize import normalize_text
-from .pii import redact_pii
+from .pii import build_presidio, redact_pii
 
 log = get_logger("cleaner")
 _STAGE = "S3"
@@ -75,6 +75,8 @@ class DocCleaner:
         self.seen_hashes: set[str] = set()
         self.decontam = Decontaminator(c.decontam.ngram)
         self.lang_score_min: dict[str, float] = c.lang_score_min.model_dump()
+        # Presidio chỉ init khi backend yêu cầu VÀ cài sẵn (None → regex-only).
+        self.presidio = build_presidio() if c.pii.backend == "presidio" else None
 
     def clean_one(
         self, doc: Mapping[str, Any]
@@ -129,7 +131,9 @@ class DocCleaner:
                 return None, "minhash_dup"
         passed.append("dedup")
 
-        redacted, pii_types = redact_pii(text, vi_regex=self.clean.pii.vi_regex)  # §5.5
+        redacted, pii_types = redact_pii(
+            text, vi_regex=self.clean.pii.vi_regex, presidio=self.presidio
+        )  # §5.5
         passed.append("pii")
 
         if self.decontam.is_contaminated(text):  # §5.6

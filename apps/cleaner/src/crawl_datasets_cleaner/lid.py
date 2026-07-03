@@ -36,11 +36,23 @@ def _heuristic(text: str) -> tuple[str, float]:
     return ("und", 0.3)
 
 
+def _download_glotlid() -> str | None:  # pragma: no cover — cần network
+    try:
+        from huggingface_hub import hf_hub_download
+
+        return str(hf_hub_download("cis-lmu/glotlid", "model.bin"))
+    except (ImportError, OSError):
+        return None
+
+
 def _try_load_glotlid() -> Any:
+    # Opt-in: GLOTLID_MODEL trỏ file, hoặc CDS_GLOTLID_DOWNLOAD=1 → tải từ HF (cache).
     path = os.environ.get("GLOTLID_MODEL")
+    if not path and os.environ.get("CDS_GLOTLID_DOWNLOAD") == "1":
+        path = _download_glotlid()
     if not path:
         return None
-    try:  # opt-in — chỉ khi có model path
+    try:
         import fasttext
 
         return fasttext.load_model(path)

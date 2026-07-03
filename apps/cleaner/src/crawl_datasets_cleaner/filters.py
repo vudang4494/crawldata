@@ -37,10 +37,13 @@ _ALPHA_RE = re.compile(r"[^\W\d_]", re.UNICODE)
 _BULLET_PREFIX = ("•", "-", "*", "‣", "·", "◦")
 _TERMINAL_PUNCT = (".", "!", "?", '"', "'", "”", "’", "。", "…", "”")
 
-# §5.3 Gopher repetition — datatrove defaults (không nằm trong §9.3 config).
+# §5.3 Gopher repetition — datatrove GopherRepetitionFilter defaults (không ở §9.3).
 _DUP_LINE_FRAC_MAX = 0.30
 _DUP_PARA_FRAC_MAX = 0.30
+_DUP_LINE_CHAR_FRAC_MAX = 0.20
+_DUP_PARA_CHAR_FRAC_MAX = 0.20
 _TOP_NGRAM_CHAR_FRAC_MAX = {2: 0.20, 3: 0.18, 4: 0.16}
+_DUP_NGRAM_CHAR_FRAC_MAX = {5: 0.15, 6: 0.14, 7: 0.13, 8: 0.12, 9: 0.11, 10: 0.10}
 
 
 def _words(text: str) -> list[str]:
@@ -91,31 +94,52 @@ def gopher_quality(
     return None
 
 
+def _dup_fracs(segments: list[str]) -> tuple[float, float]:
+    """(dup_frac, dup_char_frac) cho danh sách line/paragraph."""
+    n = len(segments)
+    if n < 2:
+        return 0.0, 0.0
+    counts = Counter(segments)
+    total_chars = sum(len(s) for s in segments)
+    dup_chars = sum(len(s) * (c - 1) for s, c in counts.items() if c > 1)
+    return (n - len(counts)) / n, (dup_chars / total_chars if total_chars else 0.0)
+
+
 def gopher_repetition(text: str) -> str | None:
-    """Gopher repetition filter (§5.3 subset) — dup line/para + top n-gram char frac."""
-    lines = _lines(text)
-    if len(lines) >= 2:
-        dup_line_frac = 1.0 - len(set(lines)) / len(lines)
-        if dup_line_frac > _DUP_LINE_FRAC_MAX:
-            return "rep_dup_lines"
+    """Gopher repetition (§5.3) — dup line/para (+char), top & dup n-gram char frac."""
+    line_frac, line_char = _dup_fracs(_lines(text))
+    if line_frac > _DUP_LINE_FRAC_MAX:
+        return "rep_dup_lines"
+    if line_char > _DUP_LINE_CHAR_FRAC_MAX:
+        return "rep_dup_line_chars"
+
     paras = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
-    if len(paras) >= 2:
-        dup_para_frac = 1.0 - len(set(paras)) / len(paras)
-        if dup_para_frac > _DUP_PARA_FRAC_MAX:
-            return "rep_dup_paras"
+    para_frac, para_char = _dup_fracs(paras)
+    if para_frac > _DUP_PARA_FRAC_MAX:
+        return "rep_dup_paras"
+    if para_char > _DUP_PARA_CHAR_FRAC_MAX:
+        return "rep_dup_para_chars"
 
     words = _words(text)
     total_chars = sum(len(w) for w in words)
-    for n, cap in _TOP_NGRAM_CHAR_FRAC_MAX.items():
+    if not total_chars:
+        return None
+
+    for n, cap in _TOP_NGRAM_CHAR_FRAC_MAX.items():  # top n-gram (2,3,4)
         if len(words) < n:
             continue
-        grams = [tuple(words[i : i + n]) for i in range(len(words) - n + 1)]
-        top_gram, count = Counter(grams).most_common(1)[0]
-        if count < 2:
-            continue
-        gram_chars = sum(len(w) for w in top_gram) * count
-        if total_chars and gram_chars / total_chars > cap:
+        grams = Counter(tuple(words[i : i + n]) for i in range(len(words) - n + 1))
+        top_gram, count = grams.most_common(1)[0]
+        if count >= 2 and sum(len(w) for w in top_gram) * count / total_chars > cap:
             return f"rep_top_{n}gram"
+
+    for n, cap in _DUP_NGRAM_CHAR_FRAC_MAX.items():  # dup n-gram (5..10)
+        if len(words) < n:
+            continue
+        grams = Counter(tuple(words[i : i + n]) for i in range(len(words) - n + 1))
+        dup_chars = sum(sum(len(w) for w in g) for g, c in grams.items() if c > 1)
+        if dup_chars / total_chars > cap:
+            return f"rep_dup_{n}gram"
     return None
 
 
