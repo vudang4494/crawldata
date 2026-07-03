@@ -60,7 +60,7 @@ uv sync --all-extras --all-groups
 
 # Chạy service local (cần Redis ở ops/)
 docker compose -f ops/docker-compose.yml up -d redis minio prometheus grafana
-uv run --package service uvicorn crawl_datasets_service.main:app --reload
+uv run --package crawl-datasets-service uvicorn crawl_datasets_service.main:app --reload
 
 # Audit spec
 uv run verify-design-spec

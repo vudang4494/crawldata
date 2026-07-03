@@ -13,7 +13,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-lid = ["fasttext-wheel>=0.9", "glotlid>=0.1"]
+# GlotLID-M v3 (§5.2) = model fasttext trên HuggingFace (cis-lmu/glotlid),
+# KHÔNG phải package PyPI. Tải model qua huggingface-hub, load bằng fasttext.
+lid = ["fasttext-wheel>=0.9", "huggingface-hub>=0.20"]
 embed = ["sentence-transformers>=3.0", "FlagEmbedding>=1.2"]
 gpu-dedup = ["nemo-curator>=0.4"]
 dev = ["ruff>=0.4", "mypy>=1.10", "pytest>=8.2"]

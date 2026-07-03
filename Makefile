@@ -45,4 +45,4 @@ dvc-repro:
 	uv run dvc repro
 
 run-service:
-	uv run --package service uvicorn crawl_datasets_service.main:app --reload
+	uv run --package crawl-datasets-service uvicorn crawl_datasets_service.main:app --reload

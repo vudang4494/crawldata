@@ -5,7 +5,7 @@
 stages:
   probe:
     desc: S0 — Source probe
-    cmd: uv run --package probe crawl-datasets-probe --url https://example.com --out data/probe
+    cmd: uv run --package crawl-datasets-probe crawl-datasets-probe --url https://example.com --out data/probe
     deps:
       - libs/common/src/crawl_datasets_common
       - apps/probe/src/crawl_datasets_probe
@@ -18,7 +18,7 @@ stages:
 
   crawl:
     desc: S1 — Crawl
-    cmd: uv run --package crawler crawl-datasets-crawl --seeds https://example.com --out data
+    cmd: uv run --package crawl-datasets-crawler crawl-datasets-crawl --seeds https://example.com --out data
     deps:
       - libs/common/src/crawl_datasets_common
       - apps/crawler/src/crawl_datasets_crawler
@@ -33,7 +33,7 @@ stages:
 
   extract:
     desc: S2 — Extract
-    cmd: uv run --package extractor crawl-datasets-extract --in data/raw --out data
+    cmd: uv run --package crawl-datasets-extractor crawl-datasets-extract --in data/raw --out data
     deps:
       - libs/common/src/crawl_datasets_common
       - apps/extractor/src/crawl_datasets_extractor
@@ -46,7 +46,7 @@ stages:
 
   clean:
     desc: S3 — Clean + filter
-    cmd: uv run --package cleaner crawl-datasets-clean --in data/extracted --out data
+    cmd: uv run --package crawl-datasets-cleaner crawl-datasets-clean --in data/extracted --out data
     deps:
       - libs/common/src/crawl_datasets_common
       - apps/cleaner/src/crawl_datasets_cleaner
@@ -65,7 +65,7 @@ stages:
 
   profile:
     desc: S4 — Profile + suggestions
-    cmd: uv run --package profiler crawl-datasets-profile --in data/clean --out data/profile
+    cmd: uv run --package crawl-datasets-profiler crawl-datasets-profile --in data/clean --out data/profile
     deps:
       - libs/common/src/crawl_datasets_common
       - apps/profiler/src/crawl_datasets_profiler
@@ -75,7 +75,7 @@ stages:
 
   build:
     desc: S5 — Build dataset
-    cmd: uv run --package builder crawl-datasets-build --in data/clean --out data
+    cmd: uv run --package crawl-datasets-builder crawl-datasets-build --in data/clean --out data
     deps:
       - libs/common/src/crawl_datasets_common
       - apps/builder/src/crawl_datasets_builder
@@ -88,7 +88,7 @@ stages:
 
   integrate:
     desc: S6 — Integrate
-    cmd: uv run --package integrator crawl-datasets-integrate --base data/dataset --new data/new --out data/integrated
+    cmd: uv run --package crawl-datasets-integrator crawl-datasets-integrate --base data/dataset --new data/new --out data/integrated
     deps:
       - libs/common/src/crawl_datasets_common
       - apps/integrator/src/crawl_datasets_integrator

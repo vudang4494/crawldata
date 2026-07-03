@@ -16,8 +16,7 @@ htmlcov/
 build/
 dist/
 
-# uv
-uv.lock
+# uv — commit uv.lock (reproducibility as hard gate, §0/§7.3)
 
 # DVC
 .dvc/
