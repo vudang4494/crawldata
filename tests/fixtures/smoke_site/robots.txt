@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+Crawl-delay: 1
+Sitemap: http://127.0.0.1:8931/sitemap.xml

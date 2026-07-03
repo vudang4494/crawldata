@@ -1,4 +1,4 @@
-.PHONY: help install sync lint format type test audit verify docker-up docker-down dvc-repro run-service run-worker
+.PHONY: help install sync lint format type test audit verify smoke docker-up docker-down dvc-repro run-service run-worker
 
 help:
 	@echo "Targets:"
@@ -10,6 +10,7 @@ help:
 	@echo "  test         pytest"
 	@echo "  audit        node .claude/skills/verify-design-spec/verify.mjs"
 	@echo "  verify       full gate: lock-check + spec scan + lint + type + test"
+	@echo "  smoke        E2E S0..S6 thật trên fixture site local → data/smoke/ + report"
 	@echo "  docker-up    docker compose -f ops/docker-compose.yml up -d"
 	@echo "  docker-down  docker compose -f ops/docker-compose.yml down"
 	@echo "  dvc-repro    dvc repro"
@@ -44,6 +45,10 @@ verify:
 	uv run ruff check apps libs tests
 	uv run mypy apps libs
 	uv run pytest -q
+
+# Smoke E2E — serve tests/fixtures/smoke_site → chạy S0..S6 qua CLI → data/smoke/smoke_report.md
+smoke:
+	./scripts/smoke_e2e.sh
 
 docker-up:
 	docker compose -f ops/docker-compose.yml up -d
