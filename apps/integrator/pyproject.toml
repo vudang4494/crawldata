@@ -1,0 +1,24 @@
+[project]
+name = "crawl-datasets-integrator"
+version = "1.3.0"
+description = "S6 — Integrate (cross-dedup Zyda-2 + mix ratios)"
+requires-python = ">=3.12"
+dependencies = [
+    "crawl-datasets-common",
+    "click>=8.1",
+    "datasketch>=1.6",
+]
+
+[project.optional-dependencies]
+gpu-dedup = ["nemo-curator>=0.4"]
+dev = ["ruff>=0.4", "mypy>=1.10", "pytest>=8.2"]
+
+[project.scripts]
+crawl-datasets-integrate = "crawl_datasets_integrator.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/crawl_datasets_integrator"]

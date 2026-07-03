@@ -1,0 +1,49 @@
+{
+  "uid": "crawl-datasets",
+  "title": "Crawl → Clean → Build → Integrate",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Records in (per stage)",
+      "targets": [
+        {
+          "expr": "sum by (stage) (rate(stage_records_total{status=\"in\"}[5m]))",
+          "legendFormat": "{{stage}}"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Records dropped (per stage)",
+      "targets": [
+        {
+          "expr": "sum by (stage) (rate(stage_records_total{status=\"dropped\"}[5m]))",
+          "legendFormat": "{{stage}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Drop reasons",
+      "targets": [
+        {
+          "expr": "sum by (stage, reason) (rate(drop_reason_total[5m]))",
+          "legendFormat": "{{stage}} / {{reason}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Stage duration p95",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (stage, le) (rate(stage_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{stage}} p95"
+        }
+      ]
+    }
+  ]
+}

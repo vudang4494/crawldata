@@ -1,0 +1,57 @@
+# Workspace root (virtual) — monorepo apps/* + libs/* qua uv workspace.
+# `uv sync` cài toàn bộ member (editable); `uv run --package <name> ...` chạy 1 stage.
+
+[tool.uv.workspace]
+members = ["apps/*", "libs/*"]
+
+[tool.uv.sources]
+# Mọi member phụ thuộc crawl-datasets-common được resolve từ workspace, không phải PyPI.
+crawl-datasets-common = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "ruff>=0.4",
+    "mypy>=1.10",
+    "pytest>=8.2",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5.0",
+    "types-PyYAML>=6.0",
+]
+
+[tool.ruff]
+line-length = 88
+src = ["apps", "libs"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "S", "B", "C4", "PGH"]
+ignore = ["S101", "B018", "N802", "N803"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+namespace_packages = true
+explicit_package_bases = true
+
+# Third-party libs không ship type stubs (§ skeleton dùng ignore_missing_imports).
+[[tool.mypy.overrides]]
+module = ["arq.*"]
+ignore_missing_imports = true
+
+[tool.pylint]
+max_line_length = 88
+disable = ["missing-docstring", "too-few-public-methods"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.coverage.run]
+source = ["apps", "libs"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "if __name__ == .__main__.:",
+    "pragma: no cover",
+    "raise NotImplementedError",
+]

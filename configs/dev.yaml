@@ -1,0 +1,19 @@
+# Local dev overrides — chỉ đổi cho máy local. KHÔNG commit secrets.
+
+global:
+  seed: 7
+
+crawl:
+  max_depth: 1
+  per_host_concurrency: 2
+
+clean:
+  lang_allow: [vi]
+  vi_overrides:
+    use_vi_stopwords: true
+    disable_word_len_rule: true
+
+integrate:
+  mix_ratios:
+    vi: 0.8
+    en: 0.2

@@ -1,0 +1,25 @@
+[project]
+name = "crawl-datasets-profiler"
+version = "1.3.0"
+description = "S4 — Profile + suggestions (distribution, anomaly, clustering)"
+requires-python = ">=3.12"
+dependencies = [
+    "crawl-datasets-common",
+    "click>=8.1",
+    "umap-learn>=0.5",
+    "hdbscan>=0.8",
+]
+
+[project.optional-dependencies]
+embed = ["sentence-transformers>=3.0", "FlagEmbedding>=1.2"]
+dev = ["ruff>=0.4", "mypy>=1.10", "pytest>=8.2"]
+
+[project.scripts]
+crawl-datasets-profile = "crawl_datasets_profiler.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/crawl_datasets_profiler"]

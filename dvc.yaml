@@ -1,0 +1,101 @@
+# DVC pipeline — line stage theo §9.3, mỗi stage khai báo deps/outs/params.
+# Đổi params (configs/*.yaml) → `dvc repro` chỉ chạy lại stage ảnh hưởng.
+# Repro gate (§0 + §7.3) — đây là "reproducibility as hard gate".
+
+stages:
+  probe:
+    desc: S0 — Source probe
+    cmd: uv run --package probe crawl-datasets-probe --url https://example.com --out data/probe
+    deps:
+      - libs/common/src/crawl_datasets_common
+      - apps/probe/src/crawl_datasets_probe
+    params:
+      - global.seed
+      - crawl.render
+    outs:
+      - data/probe:
+          cache: true
+
+  crawl:
+    desc: S1 — Crawl
+    cmd: uv run --package crawler crawl-datasets-crawl --seeds https://example.com --out data
+    deps:
+      - libs/common/src/crawl_datasets_common
+      - apps/crawler/src/crawl_datasets_crawler
+    params:
+      - global.seed
+      - crawl.max_depth
+      - crawl.per_host_concurrency
+      - crawl.respect_robots
+    outs:
+      - data/raw:
+          cache: false  # immutable tier
+
+  extract:
+    desc: S2 — Extract
+    cmd: uv run --package extractor crawl-datasets-extract --in data/raw --out data
+    deps:
+      - libs/common/src/crawl_datasets_common
+      - apps/extractor/src/crawl_datasets_extractor
+    params:
+      - extract.primary
+      - extract.fallback
+    outs:
+      - data/extracted:
+          cache: false
+
+  clean:
+    desc: S3 — Clean + filter
+    cmd: uv run --package cleaner crawl-datasets-clean --in data/extracted --out data
+    deps:
+      - libs/common/src/crawl_datasets_common
+      - apps/cleaner/src/crawl_datasets_cleaner
+    params:
+      - global.seed
+      - clean.lang_id
+      - clean.lang_allow
+      - clean.lang_score_min
+      - clean.minhash
+      - clean.pii
+      - clean.decontam
+      - clean.vi_overrides
+    outs:
+      - data/clean:
+          cache: false
+
+  profile:
+    desc: S4 — Profile + suggestions
+    cmd: uv run --package profiler crawl-datasets-profile --in data/clean --out data/profile
+    deps:
+      - libs/common/src/crawl_datasets_common
+      - apps/profiler/src/crawl_datasets_profiler
+    outs:
+      - data/profile:
+          cache: true
+
+  build:
+    desc: S5 — Build dataset
+    cmd: uv run --package builder crawl-datasets-build --in data/clean --out data
+    deps:
+      - libs/common/src/crawl_datasets_common
+      - apps/builder/src/crawl_datasets_builder
+    params:
+      - build.format
+      - global.pipeline_version
+    outs:
+      - data/dataset:
+          cache: false  # large artifacts
+
+  integrate:
+    desc: S6 — Integrate
+    cmd: uv run --package integrator crawl-datasets-integrate --base data/dataset --new data/new --out data/integrated
+    deps:
+      - libs/common/src/crawl_datasets_common
+      - apps/integrator/src/crawl_datasets_integrator
+    params:
+      - integrate.cross_dedup
+      - integrate.source_priority
+      - integrate.mix_ratios
+    outs:
+      - data/integrated:
+          cache: false

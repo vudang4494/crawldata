@@ -1,0 +1,58 @@
+# Default config — §9.3 single source of truth
+# Rename một key → update mọi reference trong apps/*.
+
+global:
+  seed: 42
+  pipeline_version: "1.3.0"
+
+crawl:
+  render: auto            # auto|http|browser
+  max_depth: 3
+  per_host_concurrency: 4
+  respect_robots: true    # §2 fail-closed — KHÔNG đặt false
+
+extract:
+  primary: trafilatura    # trafilatura|resiliparse|rs-trafilatura
+  fallback: readability
+
+clean:
+  lang_id: glotlid        # glotlid|fasttext
+  lang_allow: [vi, en]
+  lang_score_min:
+    vi: 0.60              # §5.3 — VN cần threshold riêng
+    en: 0.65
+  gopher_quality:
+    min_words: 50
+    max_words: 100000
+    mean_word_length_min: 3
+    mean_word_length_max: 10
+    symbol_to_word_ratio: 0.1
+    bullet_line_ratio: 0.9
+    ellipsis_line_ratio: 0.3
+    alpha_word_ratio: 0.8
+    min_stopwords: 2
+  vi_overrides:
+    use_vi_stopwords: true
+    disable_word_len_rule: true
+  minhash:
+    ngram: 5
+    num_hashes: 112
+    bands: 14
+    rows: 8
+    scope: per_source      # §5.4 — KHÔNG đặt global
+  pii:
+    backend: presidio
+    vi_regex: true         # §11 — CCCD/CMND/SĐT +84
+  decontam:
+    benchmarks: [mmlu, aime, math500, mgsm]
+    ngram: 13
+
+build:
+  format: chatml
+
+integrate:
+  cross_dedup: true
+  source_priority: [curated_v2, crawl_new]   # §8.2 — giữ nguồn hạng cao
+  mix_ratios:
+    vi: 0.5
+    en: 0.5
