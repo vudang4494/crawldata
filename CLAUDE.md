@@ -22,18 +22,23 @@ Canonical targets (`Makefile`):
 | Type-check (strict) | `make type` (`mypy apps libs`) |
 | Tests | `make test` (`uv run pytest`) |
 | Audit against spec | `make audit` (`node .claude/skills/verify-design-spec/verify.mjs`) |
+| **Full gate (pre-merge)** | `make verify` (lock-check + spec scan `--target .` + lint + type + test) |
 | Reproduce pipeline | `make dvc-repro` (`uv run dvc repro`) |
 | Run service | `make run-service` (uvicorn `crawl_datasets_service.main:app`) |
 
 - **Single test:** `uv run pytest tests/test_cleaner.py::test_pipeline_end_to_end` (or `pytest -k <expr>`). `tests/conftest.py` puts every `apps/*/src` + `libs/*/src` on `sys.path`, so tests import `crawl_datasets_*` **without** an install.
 - **Spec compliance on a file/dir:** `node .claude/skills/verify-design-spec/verify.mjs --target <path>` (exit 0 clean, 1 warn, 2 error). Run before merging anything touching S0–S6.
 
-**Fast dev loop (no heavy install):** `make sync`/`make test` resolve fine (`uv.lock` is committed), but a full sync pulls heavy deps (datatrove, presidio→spaCy, pyarrow…). Because the whole pure-Python core + tests run **without** those (gated backends fall back — see below), the quick path is a throwaway env:
+**Fast dev loop (no heavy install):** a full sync pulls heavy deps (datatrove, presidio→spaCy, pyarrow; torch via the `embed` extra). The whole pure-Python core + tests run **without** those (gated backends fall back — see below), so the quick path is a throwaway env:
 ```bash
 ruff check apps libs tests
-uv run --no-project --with pytest --with pydantic --with pyyaml --with structlog --with click pytest tests/
+uv run --isolated --no-project --with pytest --with pydantic --with pyyaml --with structlog --with click pytest tests/
 ```
-`mypy --strict` additionally needs `types-PyYAML` + `prometheus-client` + `fastapi` + `arq` + `uvicorn` installed, all `apps/*/src` on `MYPYPATH`, and the `libs/common/.../py.typed` marker present (its absence silently makes mypy skip cross-package types). Untyped third-party libs are allow-listed under `[[tool.mypy.overrides]]` in the root `pyproject.toml` — add new gated backends there.
+`--isolated` matters: without it uv layers onto `.venv`, so already-installed heavy backends leak in and you are NOT testing the fallback path. Tests must stay deterministic in **both** env states: force the fallback by monkeypatching the gated global (`html_extract._trafilatura`, `sys.modules["presidio_analyzer"]`), and `pytest.skip` backend-only tests when the import is absent — see `tests/test_extractor.py` / `tests/test_cleaner.py`.
+
+`mypy --strict` needs the full env (`uv sync --all-groups`); cross-package module mapping is configured via `mypy_path` in the root `pyproject.toml` (add new members there), and requires the `libs/common/.../py.typed` marker (its absence silently makes mypy skip cross-package types). Untyped third-party libs are allow-listed under `[[tool.mypy.overrides]]` — add new gated backends there.
+
+**Dependency window:** S4 clustering deps (umap-learn/hdbscan → numba/llvmlite) live behind the profiler's `cluster` extra — never as base deps (guarded by `tests/test_packaging.py::test_heavy_backends_are_extras_not_base_deps`). Universal resolution is capped at `python_version < '3.14'` via `[tool.uv] environments` in the root `pyproject.toml`; without the cap, the resolver satisfies future-Python forks with 2021-era sdist-only llvmlite and `uv sync` breaks at build time.
 
 ## Architecture (big picture)
 

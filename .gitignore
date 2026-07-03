@@ -34,3 +34,6 @@ storage/
 .vscode/
 *.swp
 .DS_Store
+
+# Claude Code — settings cá nhân theo máy (hook trỏ path machine-specific)
+.claude/settings.local.json
