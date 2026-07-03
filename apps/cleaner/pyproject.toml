@@ -17,6 +17,8 @@ dependencies = [
 # KHÔNG phải package PyPI. Tải model qua huggingface-hub, load bằng fasttext.
 lid = ["fasttext-wheel>=0.9", "huggingface-hub>=0.20"]
 embed = ["sentence-transformers>=3.0", "FlagEmbedding>=1.2"]
+# §5.3 quality backend transformer (FineWeb2-HQ): XLM-R embed + head .pt per-lang.
+quality = ["torch>=2.2", "transformers>=4.40", "huggingface-hub>=0.20"]
 gpu-dedup = ["nemo-curator>=0.4"]
 dev = ["ruff>=0.4", "mypy>=1.10", "pytest>=8.2"]
 

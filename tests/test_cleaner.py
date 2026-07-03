@@ -155,6 +155,56 @@ def test_quality_enabled_without_model_path_fails_closed(
         quality.build_scorer(QualityConfig(enabled=True))
 
 
+def test_transformer_scorer_picks_head_by_lang() -> None:
+    # §5.3 backend transformer — head per-lang; lang không có head → fail-closed.
+    from crawl_datasets_cleaner.quality import TransformerQualityScorer
+
+    cfg = QualityConfig(enabled=True, backend="transformer", model_path="epfml/x")
+    scorer = TransformerQualityScorer(
+        cfg,
+        embed=lambda text: len(text),
+        heads={"vi": lambda emb: 0.9, "en": lambda emb: 0.2},
+    )
+    assert scorer.score("xin chào", "vi") == pytest.approx(0.9)
+    assert scorer.score("hello", "en") == pytest.approx(0.2)
+    with pytest.raises(RuntimeError, match="fail-closed"):
+        scorer.score("hola", "es")
+
+
+def test_transformer_backend_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    from crawl_datasets_cleaner import quality
+
+    cfg = QualityConfig(enabled=True, backend="transformer", model_path="epfml/x")
+    # lang_allow có lang không được lang_heads cover → raise TRƯỚC khi cần torch.
+    with pytest.raises(RuntimeError, match="lang_heads"):
+        quality.build_scorer(cfg, ["vi", "en", "ja"])
+    # thiếu torch/transformers → raise (extra cleaner[quality]).
+    monkeypatch.setattr(quality, "_torch", None)
+    monkeypatch.setattr(quality, "_transformers", None)
+    with pytest.raises(RuntimeError, match="torch"):
+        quality.build_scorer(cfg, ["vi", "en"])
+
+
+def test_pipeline_scores_vi_with_injected_transformer() -> None:
+    # DocCleaner chấm doc VN bằng head vi (score truyền lang — §5.3).
+    from crawl_datasets_cleaner.pipeline import DocCleaner
+    from crawl_datasets_cleaner.quality import TransformerQualityScorer
+
+    s = Settings()
+    cleaner = DocCleaner(s)
+    cleaner.quality = TransformerQualityScorer(
+        s.clean.quality,
+        embed=lambda text: text,
+        heads={"vi": lambda emb: 0.8, "en": lambda emb: 0.3},
+    )
+    rec, reason = cleaner.clean_one(
+        {"text": GOOD_VI, "source_url": "https://vi.example/1", "license": "cc-by"}
+    )
+    assert reason is None and rec is not None
+    assert rec["quality"] == pytest.approx(0.8)  # head vi, không phải en
+    assert "quality" in rec["prov"]["filters_passed"]
+
+
 def test_quality_classifier_scores_and_filters(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

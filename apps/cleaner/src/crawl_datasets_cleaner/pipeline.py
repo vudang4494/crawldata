@@ -78,8 +78,9 @@ class DocCleaner:
         self.lang_score_min: dict[str, float] = c.lang_score_min.model_dump()
         # Presidio chỉ init khi backend yêu cầu VÀ cài sẵn (None → regex-only).
         self.presidio = build_presidio() if c.pii.backend == "presidio" else None
-        # §5.3 quality classifier (P1): None khi tắt; raise khi bật mà thiếu backend.
-        self.quality = build_scorer(c.quality)
+        # §5.3 quality classifier (P1): None khi tắt; raise khi bật mà thiếu backend
+        # (transformer cần head .pt cho mọi lang trong lang_allow — check tại init).
+        self.quality = build_scorer(c.quality, c.lang_allow)
 
     def clean_one(
         self, doc: Mapping[str, Any]
@@ -150,7 +151,7 @@ class DocCleaner:
         # sẽ bị drop bởi filter/dedup rẻ hơn ở trên).
         quality: float | None = None
         if self.quality is not None:
-            quality = self.quality.score(text)
+            quality = self.quality.score(text, lang)
             if quality < self.clean.quality.min_score:
                 return None, "quality_score_low"
             passed.append("quality")

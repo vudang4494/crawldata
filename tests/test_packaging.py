@@ -69,6 +69,7 @@ HEAVY_OPTIONAL_BACKENDS = {
     "sentence-transformers",
     "flagembedding",
     "torch",
+    "transformers",
     "playwright",
 }
 

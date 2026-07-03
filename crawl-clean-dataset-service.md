@@ -212,6 +212,7 @@ VN là medium-resource → fastText đủ, nhưng dùng **GlotLID** để đồn
 **Quality classifier (tùy chọn, nâng chất):**
 - FineWeb-Edu style: classifier chấm "educational value" → filter theo score. Cần train/dùng classifier có sẵn.
 - Chạy inference trên **4090** (small BERT) hoặc fastText (CPU). VN: cần classifier VN hoặc multilingual, đừng dùng English-only.
+- Multilingual có sẵn: **FineWeb2-HQ classifiers** (`epfml/FineWeb-HQ-Classifiers`, apache-2.0) — mean-pooled XLM-RoBERTa-base embeddings → MLP head per-language (21 ngôn ngữ, có `vie_Latn` + `eng_Latn`), sigmoid score; chọn top 10% FineWeb/FineWeb-2 `[src]` (arXiv 2502.10361). Đây là backend `transformer` của `clean.quality` — mỗi lang trong `lang_allow` phải có head trong `lang_heads` (fail-closed).
 
 ### 5.4 Deduplication — params từ các project
 
@@ -385,7 +386,7 @@ clean:
   minhash: {ngram: 5, num_hashes: 112, bands: 14, rows: 8, scope: per_source}
   pii: {backend: presidio, vi_regex: true, presidio_langs: [en]}
   decontam: {benchmarks: [mmlu, aime, math500, mgsm], ngram: 13}
-  quality: {enabled: false, backend: fasttext, model_path: null, positive_label: __label__hq, min_score: 0.5}  # §5.3 (P1)
+  quality: {enabled: false, backend: fasttext, model_path: null, positive_label: __label__hq, min_score: 0.5, embed_model: FacebookAI/xlm-roberta-base, lang_heads: {vi: vie_Latn.pt, en: eng_Latn.pt}}  # §5.3 (P1); backend fasttext|transformer
 profile:
   cluster: {enabled: false, embed_model: BAAI/bge-m3, max_docs: 2000, min_cluster_size: 5}  # §6 (P1)
 build:
@@ -479,4 +480,5 @@ Nguyên tắc: **đơn giản nhất chạy được trước** (datatrove CPU l
 - trafilatura (ACL 2021) + WCXB benchmark (arXiv 2605.21097) `[src]`
 - NeMo Curator (github NVIDIA-NeMo/Curator, docs) — exact/fuzzy(MinHash+LSH)/semantic, GPU, RankingStrategy `[src]`
 - CulturaX (arXiv 2309.09400, 167 lang) `[src]`
+- FineWeb2-HQ (arXiv 2502.10361) — model-based data selection: XLM-R embed + classifier per-language, top 10%; weights `epfml/FineWeb-HQ-Classifiers` `[src]`
 - datatrove (github huggingface/datatrove) `[src]`

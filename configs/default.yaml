@@ -49,11 +49,13 @@ clean:
     benchmarks: [mmlu, aime, math500, mgsm]
     ngram: 13
   quality:                 # §5.3 quality classifier (P1, tùy chọn)
-    enabled: false         # true đòi fasttext + model_path (fail-closed)
-    backend: fasttext
-    model_path: null
+    enabled: false         # true đòi backend thật + model_path (fail-closed)
+    backend: fasttext      # fasttext | transformer (FineWeb2-HQ, §5.3)
+    model_path: null       # fasttext: .bin · transformer: HF repo/dir chứa head .pt
     positive_label: "__label__hq"
     min_score: 0.5
+    embed_model: FacebookAI/xlm-roberta-base       # transformer: model embed
+    lang_heads: {vi: vie_Latn.pt, en: eng_Latn.pt}  # transformer: head per-lang
 
 profile:
   cluster:                 # §6 BGE-M3→UMAP→HDBSCAN (P1) — extras cluster+embed

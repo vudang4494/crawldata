@@ -73,6 +73,8 @@ module = [
     "umap.*",
     "hdbscan.*",
     "sentence_transformers.*",
+    "torch.*",
+    "transformers.*",
 ]
 ignore_missing_imports = true
 

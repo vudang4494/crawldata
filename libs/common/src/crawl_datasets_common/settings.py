@@ -91,10 +91,16 @@ class QualityConfig(BaseModel):
     """§5.3 — quality classifier (tùy chọn, P1). enabled=true đòi backend thật."""
 
     enabled: bool = False
-    backend: str = Field(default="fasttext", pattern="^(fasttext)$")
+    backend: str = Field(default="fasttext", pattern="^(fasttext|transformer)$")
     model_path: str | None = None
     positive_label: str = "__label__hq"  # FineWeb-Edu style label dương
     min_score: float = 0.5
+    # backend transformer (§5.3, FineWeb2-HQ arXiv 2502.10361): mean-pooled
+    # XLM-R embeddings → MLP head .pt per-language (model_path = HF repo/dir).
+    embed_model: str = "FacebookAI/xlm-roberta-base"
+    lang_heads: dict[str, str] = Field(
+        default_factory=lambda: {"vi": "vie_Latn.pt", "en": "eng_Latn.pt"}
+    )
 
 
 class CleanSettings(BaseModel):
