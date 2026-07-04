@@ -18,6 +18,8 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, field, is_dataclass
 from typing import Any
 
+from crawl_datasets_common.llm import extract_json_object
+
 from .plan import DatasetPlan
 
 LLM = Callable[[list[dict[str, str]]], str]
@@ -40,19 +42,6 @@ Chỉ trả về MỘT JSON object, không markdown, không văn xuôi ngoài JS
 
 Quy tắc: KHÔNG có cách nào bỏ qua robots/license/PII — pipeline tự enforce;
 license unknown sẽ bị loại khỏi dataset publish; chọn render theo profile."""
-
-
-def _parse_json(raw: str) -> dict[str, Any]:
-    """Chịu được code-fence / lời dẫn thừa — lấy JSON object đầu tiên."""
-    text = raw.strip()
-    start = text.find("{")
-    end = text.rfind("}")
-    if start == -1 or end <= start:
-        raise ValueError("không tìm thấy JSON object trong phản hồi")
-    obj = json.loads(text[start : end + 1])
-    if not isinstance(obj, dict):
-        raise ValueError("JSON không phải object")
-    return obj
 
 
 @dataclass
@@ -115,7 +104,7 @@ class IntakeSession:
             raw = self.llm(self.messages)
             self.messages.append({"role": "assistant", "content": raw})
             try:
-                obj = _parse_json(raw)
+                obj = extract_json_object(raw)
                 kind = obj.get("type")
                 if kind == "plan":
                     self.final_plan = DatasetPlan(**obj["plan"])

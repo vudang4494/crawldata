@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
 from crawl_datasets_builder.formats import serialize
 from crawl_datasets_builder.pipeline import run
 from crawl_datasets_common.schema import Message, SFTRecord, make_provenance
@@ -64,3 +65,75 @@ def test_build_excludes_unknown_license(tmp_path: Path) -> None:
     ]
     assert len(recs) == 1
     assert "messages" in recs[0] and recs[0]["meta"]["license"] == "cc-by"
+
+
+# --- §7.1 Phase B — synthetic QA ------------------------------------------------
+
+
+def _synth_settings() -> Settings:
+    s = Settings()
+    s.build.synth.enabled = True
+    s.build.synth.questions_per_doc = 2
+    return s
+
+
+def _write_clean(tmp_path: Path, n: int = 1) -> Path:
+    in_dir = tmp_path / "clean"
+    in_dir.mkdir()
+    (in_dir / "p.jsonl").write_text(
+        "\n".join(json.dumps(_clean_rec("cc-by")) for _ in range(n)),
+        encoding="utf-8",
+    )
+    return in_dir
+
+
+def test_synth_mode_generates_qa_records(tmp_path: Path) -> None:
+    from crawl_datasets_builder.synth import QASynthesizer
+
+    s = _synth_settings()
+    fake = (
+        '{"pairs": [{"question": "Tài liệu nói gì?", "answer": "Nói xin chào."},'
+        '{"question": "Ai viết?", "answer": "Không rõ."}]}'
+    )
+    synth = QASynthesizer(s.build.synth, s.agent, llm=lambda messages: fake)
+    stats = run(_write_clean(tmp_path), tmp_path / "out", s, synthesizer=synth)
+    assert stats.built == 2  # 1 doc → 2 cặp QA
+    recs = [
+        json.loads(line)
+        for line in (tmp_path / "out" / "dataset" / "part-00000.jsonl")
+        .read_text()
+        .splitlines()
+    ]
+    assert [m["role"] for m in recs[0]["messages"]] == ["user", "assistant"]
+    assert recs[0]["meta"]["synthetic"] is True
+    assert recs[0]["meta"]["synth_model"] == s.agent.model
+    assert recs[0]["meta"]["source_url"] == "https://a/1"  # giữ nguồn gốc
+    assert recs[0]["meta"]["id"] != recs[1]["meta"]["id"]  # id ổn định per-cặp
+
+
+def test_synth_bad_json_drops_doc_not_run(tmp_path: Path) -> None:
+    from crawl_datasets_builder.synth import QASynthesizer
+
+    s = _synth_settings()
+    synth = QASynthesizer(s.build.synth, s.agent, llm=lambda messages: "không JSON")
+    stats = run(_write_clean(tmp_path), tmp_path / "out", s, synthesizer=synth)
+    assert stats.built == 0 and stats.dropped.get("synth_failed") == 1
+
+
+def test_synth_retries_bad_json_then_succeeds() -> None:
+    from crawl_datasets_builder.synth import QASynthesizer
+
+    s = _synth_settings()
+    responses = iter(["rác", '{"pairs": [{"question": "Q?", "answer": "A."}]}'])
+    synth = QASynthesizer(s.build.synth, s.agent, llm=lambda m: next(responses))
+    assert synth.generate("text") == [("Q?", "A.")]
+
+
+def test_synth_enabled_without_backend_fails_closed(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    from crawl_datasets_common import llm as common_llm
+
+    monkeypatch.setattr(common_llm, "_httpx", None)
+    with pytest.raises(RuntimeError, match="httpx"):
+        run(_write_clean(tmp_path), tmp_path / "out", _synth_settings())

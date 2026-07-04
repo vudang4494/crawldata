@@ -839,18 +839,22 @@ dev = [
     { name = "pytest", marker = "python_full_version < '3.14'" },
     { name = "ruff", marker = "python_full_version < '3.14'" },
 ]
+synth = [
+    { name = "httpx", marker = "python_full_version < '3.14'" },
+]
 
 [package.metadata]
 requires-dist = [
     { name = "click", specifier = ">=8.1" },
     { name = "crawl-datasets-common", editable = "libs/common" },
     { name = "datasets", specifier = ">=2.20" },
+    { name = "httpx", marker = "extra == 'synth'", specifier = ">=0.27" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },
     { name = "pyarrow", specifier = ">=16.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.2" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["synth", "dev"]
 
 [[package]]
 name = "crawl-datasets-cleaner"

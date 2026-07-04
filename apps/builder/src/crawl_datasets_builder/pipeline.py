@@ -19,11 +19,12 @@ from crawl_datasets_common.observability import (
     records_total,
     stage_timer,
 )
-from crawl_datasets_common.schema import Provenance, SFTRecord
+from crawl_datasets_common.schema import Message, Provenance, SFTRecord, stable_id
 from crawl_datasets_common.settings import Settings
 from crawl_datasets_common.storage import StorageLayout, mark_done
 
 from .formats import serialize, to_messages
+from .synth import QASynthesizer, build_synthesizer
 
 log = get_logger("builder")
 _STAGE = "S5"
@@ -58,10 +59,22 @@ def _iter_records(in_dir: Path) -> Iterator[dict[str, Any]]:
                     yield json.loads(line)
 
 
-def run(in_dir: Path, out_dir: Path, settings: Settings) -> BuildStats:
-    """clean shards → dataset/part-00000.jsonl (+ .parquet nếu có pyarrow)."""
+def run(
+    in_dir: Path,
+    out_dir: Path,
+    settings: Settings,
+    synthesizer: QASynthesizer | None = None,
+) -> BuildStats:
+    """clean shards → dataset/part-00000.jsonl (+ .parquet nếu có pyarrow).
+
+    `build.synth.enabled` (§7.1 Phase B): mỗi doc → LLM sinh cặp QA thay vì
+    wrap text; `synthesizer` inject được cho test (mặc định build từ config —
+    raise fail-closed nếu bật mà thiếu backend).
+    """
     dataset_tier = StorageLayout(root=out_dir).tier("dataset")
     fmt = settings.build.format
+    if synthesizer is None:
+        synthesizer = build_synthesizer(settings.build.synth, settings.agent)
     stats = BuildStats()
     rows: list[str] = []
     out_path = dataset_tier / "part-00000.jsonl"
@@ -69,6 +82,13 @@ def run(in_dir: Path, out_dir: Path, settings: Settings) -> BuildStats:
     def _inc(status: str) -> None:
         if records_total is not None:
             records_total.labels(stage=_STAGE, status=status).inc()
+
+    def _emit(sft: SFTRecord, out_f: Any) -> None:
+        line = json.dumps(serialize(sft, fmt), ensure_ascii=False)
+        out_f.write(line + "\n")
+        rows.append(line)
+        stats.built += 1
+        _inc("out")
 
     with stage_timer(_STAGE), out_path.open("w", encoding="utf-8") as out_f:
         for rec in _iter_records(in_dir):
@@ -80,27 +100,57 @@ def run(in_dir: Path, out_dir: Path, settings: Settings) -> BuildStats:
                 record_drop(_STAGE, "no_provenance")  # §0 fail-closed
                 continue
             try:
-                sft = SFTRecord(
-                    id=str(rec["id"]),
-                    messages=to_messages(rec),
-                    lang=str(rec.get("lang", "und")),
-                    quality=rec.get("quality"),
-                    prov=Provenance(**prov_raw),
-                )
-            except (KeyError, ValueError, TypeError):
+                prov = Provenance(**prov_raw)
+            except (ValueError, TypeError):
                 stats.dropped["invalid_record"] += 1
                 record_drop(_STAGE, "invalid_record")
                 continue
-            if not sft.is_publishable:  # §2 — license:unknown loại khỏi release
+            # §2 — license gate TRƯỚC khi build/sinh (không tốn inference
+            # cho doc sẽ bị loại khỏi release).
+            if not prov.is_publishable:
                 stats.dropped["license_unknown"] += 1
                 record_drop(_STAGE, "license_unknown")
                 _inc("dropped")
                 continue
-            line = json.dumps(serialize(sft, fmt), ensure_ascii=False)
-            out_f.write(line + "\n")
-            rows.append(line)
-            stats.built += 1
-            _inc("out")
+            if synthesizer is None:
+                try:
+                    sft = SFTRecord(
+                        id=str(rec["id"]),
+                        messages=to_messages(rec),
+                        lang=str(rec.get("lang", "und")),
+                        quality=rec.get("quality"),
+                        prov=prov,
+                    )
+                except (KeyError, ValueError, TypeError):
+                    stats.dropped["invalid_record"] += 1
+                    record_drop(_STAGE, "invalid_record")
+                    continue
+                _emit(sft, out_f)
+                continue
+            # §7.1 Phase B — LLM sinh QA; lỗi per-doc → drop, không chặn run.
+            try:
+                pairs = synthesizer.generate(str(rec.get("text", "")))
+            except RuntimeError as exc:  # SynthError / LLM không phản hồi
+                stats.dropped["synth_failed"] += 1
+                record_drop(_STAGE, "synth_failed")
+                log.warning("synth_failed", id=rec.get("id"), error=str(exc))
+                _inc("dropped")
+                continue
+            synth_prov = prov.model_copy(
+                update={"synthetic": True, "synth_model": synthesizer.model}
+            )
+            for i, (question, answer) in enumerate(pairs):
+                sft = SFTRecord(
+                    id=stable_id(str(rec.get("id", "")), str(i)),
+                    messages=[
+                        Message(role="user", content=question),
+                        Message(role="assistant", content=answer),
+                    ],
+                    lang=str(rec.get("lang", "und")),
+                    quality=rec.get("quality"),
+                    prov=synth_prov,
+                )
+                _emit(sft, out_f)
 
     parquet = False
     if _pq is not None and _pa is not None and rows:  # pragma: no cover — cần pyarrow
@@ -117,6 +167,7 @@ def run(in_dir: Path, out_dir: Path, settings: Settings) -> BuildStats:
             "dropped": dict(stats.dropped),
             "format": fmt,
             "parquet": parquet,
+            "synth": synthesizer is not None,  # §7.1 Phase B
             "pipeline_version": settings.global_.pipeline_version,
         },
     )

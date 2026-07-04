@@ -68,6 +68,10 @@ profile:
 
 build:
   format: chatml
+  synth:                   # §7.1 Phase B — LLM local (block agent) sinh cặp QA
+    enabled: false
+    questions_per_doc: 2
+    max_chars: 4000
 
 integrate:
   cross_dedup: true

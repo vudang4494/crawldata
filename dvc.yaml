@@ -81,6 +81,7 @@ stages:
       - apps/builder/src/crawl_datasets_builder
     params:
       - build.format
+      - build.synth
       - global.pipeline_version
     outs:
       - data/dataset:

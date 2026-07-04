@@ -140,8 +140,17 @@ class ServiceSettings(BaseModel):
     max_jobs: int = 4
 
 
+class SynthConfig(BaseModel):
+    """§7.1 Phase B — sinh cặp QA từ clean text bằng LLM local (connection `agent`)."""
+
+    enabled: bool = False
+    questions_per_doc: int = Field(default=2, ge=1, le=10)
+    max_chars: int = 4000  # cắt input trước khi đưa LLM (context model nhỏ)
+
+
 class BuildSettings(BaseModel):
     format: str = Field(default="chatml", pattern="^(chatml|sharegpt|alpaca)$")
+    synth: SynthConfig = Field(default_factory=SynthConfig)
 
 
 class IntegrateSettings(BaseModel):

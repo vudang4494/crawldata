@@ -45,6 +45,9 @@ class Provenance(BaseModel):
     pipeline_version: str
     seed: int
     filters_passed: list[str] = Field(default_factory=list)
+    # §7.1 Phase B — record do LLM sinh (QA) từ source; giữ source_url gốc.
+    synthetic: bool = False
+    synth_model: str | None = None
 
     @computed_field  # type: ignore[prop-decorator]
     @property

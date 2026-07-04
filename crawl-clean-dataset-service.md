@@ -279,6 +279,8 @@ Profiling **trước** khi build → quyết định mix ratio (§8) dựa dữ 
 
 Lưu **JSONL** (1 record/dòng, stream được) → convert **Parquet/Arrow** cho HF `datasets` (columnar, memory-map, nhanh) `[2nd]`.
 
+**Synthetic QA (Phase B):** bật `build.synth` → S5 dùng LLM local (connection block `agent`, §14) sinh `questions_per_doc` cặp hỏi-đáp per clean doc — cùng ngôn ngữ với nguồn, câu trả lời chỉ dựa trên text nguồn (không bịa). Record mang `synthetic: true` + `synth_model` trong provenance, giữ nguyên `source_url`/`license` gốc; **license gate chạy TRƯỚC khi sinh** (không tốn inference cho doc unpublishable). LLM trả JSON hỏng → retry có phản hồi lỗi rồi drop `synth_failed` (fail-visible, không chặn cả run) `[guess]`. LLM-in-loop → điểm gắn Langfuse tracing (§9.4).
+
 Ví dụ record (ChatML-style JSONL):
 ```json
 {"messages":[{"role":"system","content":"..."},{"role":"user","content":"..."},{"role":"assistant","content":"..."}],
@@ -295,6 +297,8 @@ class Provenance(BaseModel):
     pipeline_version: str
     seed: int
     filters_passed: list[str]
+    synthetic: bool = False   # §7.1 Phase B — record do LLM sinh từ source
+    synth_model: str | None   # model đã sinh (vd gemma4:e4b)
 
 class SFTRecord(BaseModel):
     id: str                   # stable ID (hash text) cho dedup/versioning
@@ -393,6 +397,7 @@ profile:
   cluster: {enabled: false, embed_model: BAAI/bge-m3, max_docs: 2000, min_cluster_size: 5}  # §6 (P1)
 build:
   format: chatml
+  synth: {enabled: false, questions_per_doc: 2, max_chars: 4000}  # §7.1 Phase B — LLM local (agent.*) sinh QA
 integrate:
   cross_dedup: true
   source_priority: [curated_v2, crawl_new]   # giữ doc nguồn hạng cao
